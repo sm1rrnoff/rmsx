@@ -100,50 +100,26 @@ from pathlib import Path
 from .flipbook import run_flipbook
 
 
-# def get_selection_string(analysis_type="protein", chain_sele=None):
-#     """
-#     Return the MDAnalysis selection string for a given analysis type.
-#     Defaults to protein (CA atoms).
-#     For DNA, you can choose e.g. "nucleic and name P" or "nucleic and name C4'".
-#
-#     analysis_type: str
-#         Either "protein" (default) or "dna" (or another defined string).
-#     chain_sele: str
-#         If provided, we append 'and segid <chain_sele>'.
-#     """
-#     if analysis_type.lower() == "dna":
-#         base_selection = "nucleic and name P"
-#     else:
-#         base_selection = "protein and name CA"
-#
-#     if chain_sele:
-#         base_selection += f" and segid {chain_sele}"
-#
-#     return base_selection
-
-def get_selection_string(analysis_type="protein", chain_sele=None, full_backbone=False):
+def get_selection_string(analysis_type="protein", chain_sele=None):
     """
     Return the MDAnalysis selection string for a given analysis type.
-    If full_backbone=True, selects N, CA, C, O (for proteins) or nucleicbackbone (for DNA).
+    Defaults to protein (CA atoms).
+    For DNA, you can choose e.g. "nucleic and name P" or "nucleic and name C4'".
 
-    Parameters
-    ----------
-    analysis_type : str
-        "protein" or "dna"
-    chain_sele : str
-        Optional chain selection (segid)
-    full_backbone : bool
-        If True, selects backbone instead of single representative atoms (e.g. CA)
+    analysis_type: str
+        Either "protein" (default) or "dna" (or another defined string).
+    chain_sele: str
+        If provided, we append 'and segid <chain_sele>'.
     """
     if analysis_type.lower() == "dna":
-        base_selection = "nucleicbackbone" if full_backbone else "nucleic and name P"
+        base_selection = "nucleic and name P"
     else:
-        base_selection = "protein and backbone" if full_backbone else "protein and name CA"
+        base_selection = "protein and name CA"
 
     if chain_sele:
         base_selection += f" and segid {chain_sele}"
-    return base_selection
 
+    return base_selection
 
 
 def summarize_rmsx(rmsx_csv, n=3, print_output=True):
@@ -255,237 +231,102 @@ def setup_directory(output_dir, overwrite=False, verbose=True):
         raise RuntimeError("User chose not to overwrite the existing directory.")
 
 
-# def process_trajectory_slices_by_size(
-#     u,
-#     output_dir,
-#     total_size,
-#     slice_size,
-#     chain_sele=None,
-#     start_frame=0,
-#     analysis_type="protein",
-#     verbose=True
-# # ):
-# def process_trajectory_slices_by_num(
-#         u, output_dir, total_size, num_slices,
-#         chain_sele=None, start_frame=0,
-#         analysis_type="protein", verbose=True,
-#         full_backbone=False
-# ):
-#     """
-#     Slice the trajectory based on a fixed number of frames per slice, ensuring all slices have the same size.
-#     Truncate excess frames if total_size is not divisible by slice_size.
-#     """
-#     adjusted_total_size = (total_size // slice_size) * slice_size
-#     excess_frames = total_size - adjusted_total_size
-#
-#     if excess_frames > 0:
-#         if verbose:
-#             print(f"Truncating {excess_frames} excess frame(s). Original size: {total_size}, Updated: {adjusted_total_size}")
-#         total_size = adjusted_total_size
-#     else:
-#         if verbose:
-#             print(f"No truncation needed. Total size: {total_size} frames")
-#
-#     n_slices = total_size // slice_size
-#     if n_slices == 0:
-#         raise ValueError("Slice size is larger than the total number of frames available in the chosen range.")
-#
-#     if verbose:
-#         print(f"Processing frames {start_frame} to {start_frame + total_size - 1} of the trajectory.")
-#         print(f"Number of slices: {n_slices}")
-#
-#     # selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
-#     selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele,
-#                                          full_backbone=full_backbone)
-#
-#     atoms_to_analyze = u.select_atoms(selection_str)
-#
-#     all_data = pd.DataFrame()
-#
-#     for i in range(n_slices):
-#         slice_start = start_frame + i * slice_size
-#         slice_end = slice_start + slice_size  # stop is exclusive in RMSF.run
-#
-#         u.trajectory[slice_start]
-#         atoms_to_analyze = u.select_atoms(selection_str)
-#         if len(atoms_to_analyze) == 0:
-#             raise ValueError(f"Selection returned empty at frame {slice_start}. Check your selection or coordinate file.")
-#
-#         coord_path = os.path.join(output_dir, f'slice_{i + 1}_first_frame.pdb')
-#         with mda.Writer(coord_path, atoms_to_analyze.n_atoms, multiframe=False) as coord_writer:
-#             coord_writer.write(atoms_to_analyze)
-#         if verbose:
-#             print(f"First frame of slice {i + 1} written to {coord_path}")
-#
-#         # rmsf_calc = RMSF(atoms_to_analyze)
-#         # rmsf_calc.run(start=slice_start, stop=slice_end)
-#         #
-#         # df = pd.DataFrame(
-#         #     {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
-#         #     index=[residue.resid for residue in atoms_to_analyze.residues],
-#         # )
-#         # Compute RMSF only for CA atoms (one per residue)
-#         ca_atoms = atoms_to_analyze.select_atoms("name CA")
-#         rmsf_calc = RMSF(ca_atoms)
-#         rmsf_calc.run(start=slice_start, stop=slice_end)
-#
-#         df = pd.DataFrame(
-#             {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
-#             index=[res.resid for res in ca_atoms.residues],
-#         )
-#
-#         if all_data.empty:
-#             all_data = df
-#         else:
-#             all_data = pd.concat([all_data, df], axis=1)
-#
-#         if verbose:
-#             print(f"Slice {i + 1}: RMSF computed for frames {slice_start} to {slice_end - 1} ({slice_size} frames)")
-#
-#     if not all_data.empty:
-#         all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in atoms_to_analyze.residues])
-#         all_data.insert(0, 'ResidueID', [res.resid for res in atoms_to_analyze.residues])
-#
-#     return all_data, adjusted_total_size
+def process_trajectory_slices_by_size(
+    u,
+    output_dir,
+    total_size,
+    slice_size,
+    chain_sele=None,
+    start_frame=0,
+    analysis_type="protein",
+    verbose=True
+):
+    """
+    Slice the trajectory based on a fixed number of frames per slice, ensuring all slices have the same size.
+    Truncate excess frames if total_size is not divisible by slice_size.
+    """
+    adjusted_total_size = (total_size // slice_size) * slice_size
+    excess_frames = total_size - adjusted_total_size
 
+    if excess_frames > 0:
+        if verbose:
+            print(f"Truncating {excess_frames} excess frame(s). Original size: {total_size}, Updated: {adjusted_total_size}")
+        total_size = adjusted_total_size
+    else:
+        if verbose:
+            print(f"No truncation needed. Total size: {total_size} frames")
 
-# def process_trajectory_slices_by_num(
-#     u,
-#     output_dir,
-#     total_size,
-#     num_slices,
-#     chain_sele=None,
-#     start_frame=0,
-#     analysis_type="protein",
-#     verbose=True
-# ):
+    n_slices = total_size // slice_size
+    if n_slices == 0:
+        raise ValueError("Slice size is larger than the total number of frames available in the chosen range.")
 
+    if verbose:
+        print(f"Processing frames {start_frame} to {start_frame + total_size - 1} of the trajectory.")
+        print(f"Number of slices: {n_slices}")
 
-# def process_trajectory_slices_by_num(
-#         u, output_dir, total_size, num_slices,
-#         chain_sele=None, start_frame=0,
-#         analysis_type="protein", verbose=True,
-#         full_backbone=False
-# ):
-#     """
-#     Slice the trajectory into a specific number of slices, ensuring all slices have the same size.
-#     Truncate excess frames if total_size is not divisible by num_slices.
-#     """
-#     adjusted_total_size = (total_size // num_slices) * num_slices
-#     excess_frames = total_size - adjusted_total_size
-#
-#     if excess_frames > 0:
-#         if verbose:
-#             print(f"Truncating {excess_frames} excess frame(s). Original size: {total_size}, Updated: {adjusted_total_size}")
-#         total_size = adjusted_total_size
-#     else:
-#         if verbose:
-#             print(f"No truncation needed. Total size: {total_size} frames")
-#
-#     if verbose:
-#         print(f"Processing frames {start_frame} to {start_frame + total_size - 1} of the trajectory.")
-#         print(f"Number of slices: {num_slices}")
-#
-#     base_size = total_size // num_slices
-#     slice_sizes = [base_size] * num_slices
-#
-#     # selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
-#     selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele,
-#                                          full_backbone=full_backbone)
-#     atoms_to_analyze = u.select_atoms(selection_str)
-#
-#     all_data = pd.DataFrame()
-#
-#     current_start = start_frame
-#     for i, size in enumerate(slice_sizes):
-#         slice_start = current_start
-#         slice_end = slice_start + size
-#         current_start += size
-#
-#         u.trajectory[slice_start]
-#         coord_path = os.path.join(output_dir, f'slice_{i + 1}_first_frame.pdb')
-#         with mda.Writer(coord_path, atoms_to_analyze.n_atoms, multiframe=False) as coord_writer:
-#             coord_writer.write(atoms_to_analyze)
-#         if verbose:
-#             print(f"First frame of slice {i + 1} written to {coord_path}")
-#
-#         # rmsf_calc = RMSF(atoms_to_analyze)
-#         # rmsf_calc.run(start=slice_start, stop=slice_end)
-#         #
-#         # df = pd.DataFrame(
-#         #     {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
-#         #     index=[residue.resid for residue in atoms_to_analyze.residues],
-#         # )
-#         # Compute RMSF only for CA atoms (one per residue)
-#         ca_atoms = atoms_to_analyze.select_atoms("name CA")
-#         rmsf_calc = RMSF(ca_atoms)
-#         rmsf_calc.run(start=slice_start, stop=slice_end)
-#
-#         df = pd.DataFrame(
-#             {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
-#             index=[res.resid for res in ca_atoms.residues],
-#         )
-#
-#         if all_data.empty:
-#             all_data = df
-#         else:
-#             all_data = pd.concat([all_data, df], axis=1)
-#
-#         if verbose:
-#             print(f"Slice {i + 1}: RMSF computed for frames {slice_start} to {slice_end - 1} ({size} frames)")
-#
-#     if not all_data.empty:
-#         all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in atoms_to_analyze.residues])
-#         all_data.insert(0, 'ResidueID', [res.resid for res in atoms_to_analyze.residues])
-#
-#     return all_data, adjusted_total_size
+    selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
+    atoms_to_analyze = u.select_atoms(selection_str)
+
+    all_data = pd.DataFrame()
+
+    for i in range(n_slices):
+        slice_start = start_frame + i * slice_size
+        slice_end = slice_start + slice_size  # stop is exclusive in RMSF.run
+
+        u.trajectory[slice_start]
+        atoms_to_analyze = u.select_atoms(selection_str)
+        if len(atoms_to_analyze) == 0:
+            raise ValueError(f"Selection returned empty at frame {slice_start}. Check your selection or coordinate file.")
+
+        coord_path = os.path.join(output_dir, f'slice_{i + 1}_first_frame.pdb')
+        with mda.Writer(coord_path, atoms_to_analyze.n_atoms, multiframe=False) as coord_writer:
+            coord_writer.write(atoms_to_analyze)
+        if verbose:
+            print(f"First frame of slice {i + 1} written to {coord_path}")
+
+        rmsf_calc = RMSF(atoms_to_analyze)
+        rmsf_calc.run(start=slice_start, stop=slice_end)
+
+        df = pd.DataFrame(
+            {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
+            index=[residue.resid for residue in atoms_to_analyze.residues],
+        )
+
+        if all_data.empty:
+            all_data = df
+        else:
+            all_data = pd.concat([all_data, df], axis=1)
+
+        if verbose:
+            print(f"Slice {i + 1}: RMSF computed for frames {slice_start} to {slice_end - 1} ({slice_size} frames)")
+
+    if not all_data.empty:
+        all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in atoms_to_analyze.residues])
+        all_data.insert(0, 'ResidueID', [res.resid for res in atoms_to_analyze.residues])
+
+    return all_data, adjusted_total_size
 
 
 def process_trajectory_slices_by_num(
-        u, output_dir, total_size, num_slices,
-        chain_sele=None, start_frame=0,
-        analysis_type="protein", verbose=True,
-        full_backbone=False
+    u,
+    output_dir,
+    total_size,
+    num_slices,
+    chain_sele=None,
+    start_frame=0,
+    analysis_type="protein",
+    verbose=True
 ):
     """
     Slice the trajectory into a specific number of slices, ensuring all slices have the same size.
     Truncate excess frames if total_size is not divisible by num_slices.
-
-    Parameters
-    ----------
-    u : MDAnalysis.Universe
-        Loaded MD trajectory.
-    output_dir : str
-        Path to the directory where per-slice results are saved.
-    total_size : int
-        Total number of frames in the analyzed range.
-    num_slices : int
-        Number of slices to divide the trajectory into.
-    chain_sele : str, optional
-        Chain ID (segid) to restrict analysis to a specific chain.
-    start_frame : int, optional
-        Index of the first frame to analyze.
-    analysis_type : str, optional
-        "protein" or "dna", determines atom selection.
-    verbose : bool, optional
-        Print progress and details if True.
-    full_backbone : bool, optional
-        If True, select backbone atoms (N, CA, C, O) instead of CA-only.
-
-    Returns
-    -------
-    all_data : pandas.DataFrame
-        DataFrame containing per-residue RMSF values for each slice.
-    adjusted_total_size : int
-        The adjusted total number of frames used after truncation.
     """
     adjusted_total_size = (total_size // num_slices) * num_slices
     excess_frames = total_size - adjusted_total_size
 
     if excess_frames > 0:
         if verbose:
-            print(f"Truncating {excess_frames} excess frame(s). "
-                  f"Original size: {total_size}, Updated: {adjusted_total_size}")
+            print(f"Truncating {excess_frames} excess frame(s). Original size: {total_size}, Updated: {adjusted_total_size}")
         total_size = adjusted_total_size
     else:
         if verbose:
@@ -498,60 +339,45 @@ def process_trajectory_slices_by_num(
     base_size = total_size // num_slices
     slice_sizes = [base_size] * num_slices
 
-    selection_str = get_selection_string(
-        analysis_type=analysis_type,
-        chain_sele=chain_sele,
-        full_backbone=full_backbone
-    )
+    selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
+    atoms_to_analyze = u.select_atoms(selection_str)
 
     all_data = pd.DataFrame()
-    current_start = start_frame
 
+    current_start = start_frame
     for i, size in enumerate(slice_sizes):
         slice_start = current_start
         slice_end = slice_start + size
         current_start += size
 
-        # Move trajectory to start of slice
         u.trajectory[slice_start]
-        atoms_to_analyze = u.select_atoms(selection_str)
-
-        # Restrict to CA atoms for per-residue RMSF
-        ca_atoms = atoms_to_analyze.select_atoms("name CA")
-        if len(ca_atoms) == 0:
-            raise ValueError(f"No CA atoms found for selection '{selection_str}' "
-                             f"in slice {i + 1} (chain={chain_sele}).")
-
-        # Write representative structure for this slice
-        coord_path = os.path.join(output_dir, f"slice_{i + 1}_first_frame.pdb")
+        coord_path = os.path.join(output_dir, f'slice_{i + 1}_first_frame.pdb')
         with mda.Writer(coord_path, atoms_to_analyze.n_atoms, multiframe=False) as coord_writer:
             coord_writer.write(atoms_to_analyze)
         if verbose:
             print(f"First frame of slice {i + 1} written to {coord_path}")
 
-        # Compute RMSF for CA atoms
-        rmsf_calc = RMSF(ca_atoms)
+        rmsf_calc = RMSF(atoms_to_analyze)
         rmsf_calc.run(start=slice_start, stop=slice_end)
 
-        # Store RMSF results per residue
         df = pd.DataFrame(
             {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
-            index=[res.resid for res in ca_atoms.residues],
+            index=[residue.resid for residue in atoms_to_analyze.residues],
         )
 
-        all_data = pd.concat([all_data, df], axis=1) if not all_data.empty else df
+        if all_data.empty:
+            all_data = df
+        else:
+            all_data = pd.concat([all_data, df], axis=1)
 
         if verbose:
-            print(f"Slice {i + 1}: RMSF computed for frames "
-                  f"{slice_start} to {slice_end - 1} ({size} frames)")
+            print(f"Slice {i + 1}: RMSF computed for frames {slice_start} to {slice_end - 1} ({size} frames)")
 
-    # Add residue and chain metadata
     if not all_data.empty:
-        all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in ca_atoms.residues])
-        all_data.insert(0, 'ResidueID', [res.resid for res in ca_atoms.residues])
+        all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in atoms_to_analyze.residues])
+        all_data.insert(0, 'ResidueID', [res.resid for res in atoms_to_analyze.residues])
 
     return all_data, adjusted_total_size
-
 
 
 def analyze_trajectory(output_dir, chain_sele=None):
@@ -1011,7 +837,6 @@ def run_rmsx(
         summary_n=3,
         manual_length_ns=None,
         log_transform=False,
-        full_backbone=False,
         custom_fill_label=""
 ):
     """
@@ -1084,31 +909,18 @@ def run_rmsx(
     if num_slices is not None:
         if verbose:
             print(f"Using the slicing method with num_slices={num_slices}")
-        # all_data, adjusted_total_size = process_trajectory_slices_by_num(
-        #     u, chain_output_dir, used_frames_count, num_slices,
-        #     chain_sele=chain_sele, start_frame=start_frame,
-        #     analysis_type=analysis_type, verbose=verbose
-        # )
         all_data, adjusted_total_size = process_trajectory_slices_by_num(
             u, chain_output_dir, used_frames_count, num_slices,
             chain_sele=chain_sele, start_frame=start_frame,
-            analysis_type=analysis_type, verbose=verbose,
-            full_backbone=full_backbone
+            analysis_type=analysis_type, verbose=verbose
         )
-
     elif slice_size is not None:
         if verbose:
             print(f"Using the slicing method with slice_size={slice_size}")
-        # all_data, adjusted_total_size = process_trajectory_slices_by_size(
-        #     u, chain_output_dir, used_frames_count, slice_size,
-        #     chain_sele=chain_sele, start_frame=start_frame,
-        #     analysis_type=analysis_type, verbose=verbose
-        # )
-        all_data, adjusted_total_size = process_trajectory_slices_by_num(
-            u, chain_output_dir, used_frames_count, num_slices,
+        all_data, adjusted_total_size = process_trajectory_slices_by_size(
+            u, chain_output_dir, used_frames_count, slice_size,
             chain_sele=chain_sele, start_frame=start_frame,
-            analysis_type=analysis_type, verbose=verbose,
-            full_backbone=full_backbone
+            analysis_type=analysis_type, verbose=verbose
         )
     else:
         if verbose:
@@ -1167,14 +979,10 @@ def run_rmsx(
     return summary_tuple
 
 
-# def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=None, slice_size=None,
-#                    rscript_executable='Rscript', verbose=True, interpolate=True, triple=False, overwrite=False,
-#                    palette='viridis', start_frame=0, end_frame=None, sync_color_scale=False, analysis_type="protein",
-#                    manual_length_ns=None, summary_n=3, log_transform=False, custom_fill_label=""):
 def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=None, slice_size=None,
                    rscript_executable='Rscript', verbose=True, interpolate=True, triple=False, overwrite=False,
-                   palette='viridis', start_frame=0, end_frame=None, sync_color_scale=False,
-                   analysis_type="protein", manual_length_ns=None, summary_n=3, log_transform=False, full_backbone=False, custom_fill_label=""):
+                   palette='viridis', start_frame=0, end_frame=None, sync_color_scale=False, analysis_type="protein",
+                   manual_length_ns=None, summary_n=3, log_transform=False, custom_fill_label=""):
     """
     Perform RMSX analysis for all chains in the topology file.
 
@@ -1254,7 +1062,6 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
             summary_n=summary_n,
             manual_length_ns=manual_length_ns,
             log_transform=log_transform,
-            full_backbone=full_backbone,
             custom_fill_label=custom_fill_label  # Passing the custom label
         )
 
@@ -1628,10 +1435,8 @@ def run_shift_flipbook(
 # trying to make this work with shift maps too:
 
 
-# def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, chain_sele=None, start_frame=0,
-#                                       analysis_type="protein", verbose=True):
 def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, chain_sele=None, start_frame=0,
-                                      analysis_type="protein", verbose=True, full_backbone=False):
+                                      analysis_type="protein", verbose=True):
     """
     Slice the trajectory into slices of a fixed size and compute, for each slice,
     the Euclidean distance ("shift") for each residue between the first frame of the slice
@@ -1642,10 +1447,7 @@ def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, cha
     """
     # Set the reference positions (from the first frame of the simulation)
     u.trajectory[start_frame]
-    # selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
-    selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele,
-                                         full_backbone=full_backbone)
-
+    selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
     atoms_ref = u.select_atoms(selection_str)
     ref_coords = atoms_ref.positions.copy()  # shape: (n_residues, 3)
 
@@ -1686,28 +1488,7 @@ def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, cha
 
     return all_data, adjusted_total_size
 
-# def run_shift_map(
-#         topology_file,
-#         trajectory_file,
-#         output_dir=None,
-#         num_slices=None,
-#         slice_size=None,
-#         rscript_executable='Rscript',
-#         verbose=True,
-#         interpolate=True,
-#         triple=False,
-#         chain_sele=None,
-#         overwrite=False,
-#         palette="viridis",
-#         start_frame=0,
-#         end_frame=None,
-#         make_plot=True,
-#         analysis_type="protein",
-#         summary_n=3,
-#         manual_length_ns=None,
-#         log_transform=False,
-#         custom_fill_label=shift_fill_text
-# ):
+
 def run_shift_map(
         topology_file,
         trajectory_file,
@@ -1728,7 +1509,6 @@ def run_shift_map(
         summary_n=3,
         manual_length_ns=None,
         log_transform=False,
-        full_backbone=False,
         custom_fill_label=shift_fill_text
 ):
     """
@@ -1804,16 +1584,10 @@ def run_shift_map(
         else:
             raise RuntimeError("Either slice_size or num_slices must be specified.")
 
-    # all_data, adjusted_total_size = process_trajectory_shifts_by_size(
-    #     u, chain_output_dir, used_frames_count, slice_size,
-    #     chain_sele=chain_sele, start_frame=start_frame,
-    #     analysis_type=analysis_type, verbose=verbose
-    # )
     all_data, adjusted_total_size = process_trajectory_shifts_by_size(
         u, chain_output_dir, used_frames_count, slice_size,
         chain_sele=chain_sele, start_frame=start_frame,
-        analysis_type=analysis_type, verbose=verbose,
-        full_backbone=full_backbone
+        analysis_type=analysis_type, verbose=verbose
     )
 
     if log_transform:
@@ -1869,27 +1643,6 @@ def run_shift_map(
 
 
 
-# def all_chain_shift_map(
-#         topology_file,
-#         trajectory_file,
-#         output_dir=None,
-#         num_slices=None,
-#         slice_size=None,
-#         rscript_executable='Rscript',
-#         verbose=True,
-#         interpolate=True,
-#         triple=False,
-#         overwrite=False,
-#         palette='viridis',
-#         start_frame=0,
-#         end_frame=None,
-#         sync_color_scale=False,
-#         analysis_type="protein",
-#         manual_length_ns=None,
-#         summary_n=3,
-#         log_transform=False,
-#         custom_fill_label=shift_fill_text ###
-# ):
 def all_chain_shift_map(
         topology_file,
         trajectory_file,
@@ -1909,8 +1662,7 @@ def all_chain_shift_map(
         manual_length_ns=None,
         summary_n=3,
         log_transform=False,
-        full_backbone=False,
-        custom_fill_label=shift_fill_text  ###
+        custom_fill_label=shift_fill_text ###
 ):
     """
     Perform shift map analysis for all chains in the topology file.
@@ -1990,7 +1742,6 @@ def all_chain_shift_map(
             summary_n=summary_n,
             manual_length_ns=manual_length_ns,
             log_transform=log_transform,
-            full_backbone=full_backbone,
             custom_fill_label=custom_fill_label  # Passing the custom label
         )
 
