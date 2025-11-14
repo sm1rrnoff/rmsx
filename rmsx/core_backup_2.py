@@ -907,94 +907,31 @@ def update_all_pdb_bfactors(rmsx_csv, silent, verbose=True):
         update_pdb_bfactor(coord_file, rmsx_df, silent=silent, verbose=verbose)
 
 
-# def combine_pdb_files(chain_dirs, combined_dir, silent=False, verbose=True):
-#     """
-#     Combine PDB files from multiple chains into a single PDB file per slice.
-#     """
-#     os.makedirs(combined_dir, exist_ok=True)
-#     pdb_files = [f for f in os.listdir(chain_dirs[0]) if f.endswith('.pdb')]
-#     for pdb_file in pdb_files:
-#         combined_content = []
-#         missing_files = False
-#         for chain_dir in chain_dirs:
-#             pdb_file_path = os.path.join(chain_dir, pdb_file)
-#             if os.path.exists(pdb_file_path):
-#                 with open(pdb_file_path, 'r') as file:
-#                     combined_content.extend(file.readlines())
-#             else:
-#                 if verbose:
-#                     print(f"File {pdb_file} not found in {chain_dir}. Skipping.")
-#                 missing_files = True
-#                 break
-#         if not missing_files:
-#             combined_pdb_file = os.path.join(combined_dir, pdb_file)
-#             with open(combined_pdb_file, 'w') as combined_file:
-#                 combined_file.writelines(combined_content)
-#             if not silent and verbose:
-#                 print(f"Combined {pdb_file} from all chains into {combined_pdb_file}")
-
 def combine_pdb_files(chain_dirs, combined_dir, silent=False, verbose=True):
     """
     Combine PDB files from multiple chains into a single PDB file per slice.
     """
     os.makedirs(combined_dir, exist_ok=True)
-
-    # Check for PDB files in the first chain directory
-    try:
-        pdb_files = [f for f in os.listdir(chain_dirs[0]) if f.endswith('.pdb')]
-    except (FileNotFoundError, NotADirectoryError):
-        if verbose:
-            print(f"Error: Directory {chain_dirs[0]} not found. Cannot combine PDBs.")
-        return  # Exit the function
-
-    if not pdb_files:
-        if verbose:
-            print(f"Warning: No PDB files found in {chain_dirs[0]}. Nothing to combine.")
-        return  # Exit the function
-
+    pdb_files = [f for f in os.listdir(chain_dirs[0]) if f.endswith('.pdb')]
     for pdb_file in pdb_files:
         combined_content = []
         missing_files = False
-        is_first_file = True  # Flag to track the first file (to keep its headers)
-
-        for chain_dir in chain_dirs:  # Process chains in the order given
+        for chain_dir in chain_dirs:
             pdb_file_path = os.path.join(chain_dir, pdb_file)
-
             if os.path.exists(pdb_file_path):
                 with open(pdb_file_path, 'r') as file:
-                    lines = file.readlines()
-
-                if is_first_file:
-                    # Keep all lines from the first file, but remove its 'END'
-                    for line in lines:
-                        if not line.startswith("END"):
-                            combined_content.append(line)
-                    is_first_file = False  # Unset the flag
-                else:
-                    # For subsequent files, ONLY keep ATOM/HETATM records
-                    for line in lines:
-                        if line.startswith("ATOM") or line.startswith("HETATM"):
-                            combined_content.append(line)
+                    combined_content.extend(file.readlines())
             else:
                 if verbose:
                     print(f"File {pdb_file} not found in {chain_dir}. Skipping.")
                 missing_files = True
                 break
-
-        # Only write if we processed files and didn't hit an error
-        if not missing_files and not is_first_file:
-            combined_content.append("END\n")  # Add a single, final END record
+        if not missing_files:
             combined_pdb_file = os.path.join(combined_dir, pdb_file)
-
             with open(combined_pdb_file, 'w') as combined_file:
                 combined_file.writelines(combined_content)
-
             if not silent and verbose:
-                # Updated message to reflect the fix
-                print(f"Correctly combined {pdb_file} from all chains into {combined_pdb_file}")
-        elif verbose:
-            print(f"Skipped writing {pdb_file} due to missing files or no files processed.")
-
+                print(f"Combined {pdb_file} from all chains into {combined_pdb_file}")
 
 
 def find_and_combine_pdb_files(output_dir, verbose=True):
@@ -1059,7 +996,7 @@ def run_rmsx(
         summary_n=3,
         manual_length_ns=None,
         log_transform=False,
-        full_backbone=True,
+        full_backbone=False,
         custom_fill_label=""
 ):
     """
@@ -1466,9 +1403,7 @@ def run_rmsx_flipbook(
         flipbook_min_bfactor=None,
         flipbook_max_bfactor=None,
         log_transform=False,
-        full_backbone=True,         # <---- ADDED
         custom_fill_label="",
-        viewer="chimerax",            # <---- NEW DEFAULT ARG
         extra_commands=None
 ):
     """
@@ -1504,21 +1439,21 @@ def run_rmsx_flipbook(
         manual_length_ns=manual_length_ns,
         summary_n=summary_n,
         log_transform=log_transform,
-        full_backbone=full_backbone,  # <---- MODIFIED
         custom_fill_label=custom_fill_label  # Propagate the custom label
     )
+
     run_flipbook(
         directory=combined_dir,
         palette=palette,
         min_bfactor=flipbook_min_bfactor,
         max_bfactor=flipbook_max_bfactor,
         spacingFactor=spacingFactor,
-        extra_commands=extra_commands,
-        viewer=viewer  # NEW default viewer
+        extra_commands=extra_commands
     )
 
     if verbose:
         print("Full RMSX flipbook analysis completed successfully.")
+
 
 def run_shift_flipbook(
         topology_file,
@@ -1541,13 +1476,10 @@ def run_shift_flipbook(
         flipbook_min_bfactor=None,
         flipbook_max_bfactor=None,
         log_transform=False,
-        sync_color_scale=False,
-        full_backbone=True,        # <---- ADDED
+        sync_color_scale= False,
         custom_fill_label=shift_fill_text,
-        viewer="chimerax",           # <---- NEW
         extra_commands=None
 ):
-
     """
     Run shift map analysis and generate a FlipBook visualization using per-chain plots only.
 
@@ -1580,17 +1512,16 @@ def run_shift_flipbook(
         manual_length_ns=manual_length_ns,
         summary_n=summary_n,
         log_transform=log_transform,
-        full_backbone=full_backbone,  # <---- ADDED
         custom_fill_label=custom_fill_label
     )
+
     run_flipbook(
         directory=combined_dir,
         palette=palette,
         min_bfactor=flipbook_min_bfactor,
         max_bfactor=flipbook_max_bfactor,
         spacingFactor=spacingFactor,
-        extra_commands=extra_commands,
-        viewer=viewer  # NEW default viewer
+        extra_commands=extra_commands
     )
 
     if verbose:
@@ -1684,85 +1615,59 @@ def run_shift_flipbook(
 
 # def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, chain_sele=None, start_frame=0,
 #                                       analysis_type="protein", verbose=True):
-
-# def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, chain_sele=None, start_frame=0,
-#                                       analysis_type="protein", verbose=True):
 def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, chain_sele=None, start_frame=0,
                                       analysis_type="protein", verbose=True, full_backbone=False):
     """
     Slice the trajectory into slices of a fixed size and compute, for each slice,
-    the Euclidean distance ("shift") for each CA residue between the first frame of the slice
+    the Euclidean distance ("shift") for each residue between the first frame of the slice
     and the reference frame (the first frame of the simulation).
 
-    The PDB files written will contain the full selection (e.g., full_backbone),
-    but the calculation is performed *only* on the CA atoms.
+    Returns a DataFrame with the same format as produced by process_trajectory_slices_by_size,
+    but with computed shift values instead of RMSF values.
     """
     # Set the reference positions (from the first frame of the simulation)
     u.trajectory[start_frame]
-
-    # Get the full selection string (e.g., "protein and backbone" or "protein and name CA")
+    # selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele)
     selection_str = get_selection_string(analysis_type=analysis_type, chain_sele=chain_sele,
                                          full_backbone=full_backbone)
 
-    # This is the full atom group for writing PDBs (e.g., backbone)
-    atoms_full_ref = u.select_atoms(selection_str)
-
-    # This is the subgroup for calculation (e.g., CA)
-    atoms_calc_ref = atoms_full_ref.select_atoms("name CA")
-
-    if len(atoms_calc_ref) == 0:
-        raise ValueError(f"No CA atoms found for selection '{selection_str}' "
-                         f"at start_frame (chain={chain_sele}). Shift map requires CA atoms.")
-
-    ref_coords = atoms_calc_ref.positions.copy()  # shape: (n_residues, 3)
+    atoms_ref = u.select_atoms(selection_str)
+    ref_coords = atoms_ref.positions.copy()  # shape: (n_residues, 3)
 
     adjusted_total_size = (total_size // slice_size) * slice_size
     n_slices = adjusted_total_size // slice_size
     if verbose:
         print(
-            f"Computing shifts (on CA atoms): {n_slices} slices from frames {start_frame} to {start_frame + adjusted_total_size - 1}.")
+            f"Computing shifts: {n_slices} slices from frames {start_frame} to {start_frame + adjusted_total_size - 1}.")
 
     all_data = pd.DataFrame()
 
     for i in range(n_slices):
         slice_index = start_frame + i * slice_size  # first frame of this slice
         u.trajectory[slice_index]
-
-        # Get the full atom group for this frame
-        atoms_full_current = u.select_atoms(selection_str)
-        # Get the subgroup for calculation
-        atoms_calc_current = atoms_full_current.select_atoms("name CA")
-
-        if len(atoms_calc_current) == 0:
-            raise ValueError(f"No CA atoms found for selection '{selection_str}' "
-                             f"in slice {i + 1} (chain={chain_sele}).")
-
-        curr_coords = atoms_calc_current.positions  # shape: (n_residues, 3)
-
-        # Compute Euclidean distance for each CA atom from its reference position
-        distances = np.linalg.norm(curr_coords - ref_coords, axis=1)  # Shape (n_residues, 1)
+        atoms_current = u.select_atoms(selection_str)
+        curr_coords = atoms_current.positions  # shape: (n_residues, 3)
+        # Compute Euclidean distance for each residue from its reference position
+        distances = np.linalg.norm(curr_coords - ref_coords, axis=1)
 
         col_name = f"slice_{i + 1}.dcd"
-
-        # Index is now based on the calculation atoms (CA), which matches len(distances)
-        df_slice = pd.DataFrame({col_name: distances}, index=[res.resid for res in atoms_calc_current.residues])
-
+        df_slice = pd.DataFrame({col_name: distances}, index=[res.resid for res in atoms_current.residues])
         if all_data.empty:
             all_data = df_slice
         else:
             all_data = pd.concat([all_data, df_slice], axis=1)
 
-        # Write out the PDB file using the *full* atom selection (atoms_full_current)
+        # Write out the PDB file using the current atom selection (atoms_current)
         coord_path = os.path.join(output_dir, f"slice_{i + 1}_first_frame.pdb")
-        with mda.Writer(coord_path, atoms_full_current.n_atoms, multiframe=False) as coord_writer:
-            coord_writer.write(atoms_full_current)
+        with mda.Writer(coord_path, atoms_current.n_atoms, multiframe=False) as coord_writer:
+            coord_writer.write(atoms_current)
 
         if verbose:
-            print(f"Slice {i + 1}: computed shifts for frame {slice_index} (wrote full selection)")
+            print(f"Slice {i + 1}: computed shifts for frame {slice_index}")
 
-    # Add identifier columns using the calculation (CA) reference selection
-    all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in atoms_calc_ref.residues])
-    all_data.insert(0, 'ResidueID', [res.resid for res in atoms_calc_ref.residues])
+    # Add identifier columns using the reference selection
+    all_data.insert(0, 'ChainID', [res.atoms[0].segid for res in atoms_ref.residues])
+    all_data.insert(0, 'ResidueID', [res.resid for res in atoms_ref.residues])
 
     return all_data, adjusted_total_size
 

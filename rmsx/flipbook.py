@@ -53,6 +53,11 @@ import platform
 import shutil
 from pathlib import Path
 
+import pty  # <-- ADDED
+import threading  # <-- ADDED
+
+from rmsx.vmd_scripts.vmd_finder import find_vmd_executable
+
 # Available color palettes: "magma" (A), "inferno" (B), "plasma" (C), "viridis" (D), "cividis" (E), "rocket" (F), "mako" (G), "turbo" (H)
 
 # Define color palettes with their respective hex codes
@@ -89,7 +94,7 @@ COLOR_PALETTES = {
         "#F7C9AA", "#FAEBDD"
     ],
     "mako": [  # From viridis_pal(option = "mako")(12)
-        "#0B0405", "#231526", "#35264C", "#403A75", "#3D5296",
+        "#0B0405", "#231526", "#35264C", "#403A75", "#3D526D",
         "#366DA0", "#3487A6", "#35A1AB", "#43BBAD", "#6CD3AD",
         "#ADE3C0", "#DEF5E5"
     ],
@@ -159,7 +164,6 @@ def _which_chimerax(explicit=None):
         versions += find_mac_apps(Path.home() / "Applications")
 
         if versions:
-            # Prefer highest version; among equals, prefer non-daily
             versions.sort(key=lambda t: (t[0], not t[1]), reverse=True)
             print("[flipbook] macOS bundle candidates (sorted):")
             for v, is_daily, name, exe in versions:
@@ -181,7 +185,6 @@ def _which_chimerax(explicit=None):
             Path(pf)  / "ChimeraX" / "bin" / "ChimeraX.exe",
             Path(pfx) / "ChimeraX" / "bin" / "ChimeraX.exe",
         ]
-        # look for versioned installs like "ChimeraX 1.8"
         for base in (Path(pf), Path(pfx)):
             for d in base.glob("ChimeraX*"):
                 guesses.append(d / "bin" / "ChimeraX.exe")
@@ -205,48 +208,26 @@ def _which_chimerax(explicit=None):
 def create_color_mapping(palette_name, colors, min_bfactor, max_bfactor, num_models):
     """
     Creates a ChimeraX color byattribute command string based on the selected palette and B-factor range.
-
-    Args:
-        palette_name (str): The name of the color palette to use.
-        colors (list): List of hex color codes.
-        min_bfactor (float): The minimum B-factor value.
-        max_bfactor (float): The maximum B-factor value.
-        num_models (int): The number of models loaded.
-
-    Returns:
-        str: A formatted ChimeraX color byattribute command string.
     """
     num_colors = len(colors)
     if num_colors < 2:
         raise ValueError("At least two colors are required to create a gradient.")
 
-    # Calculate the interval between color stops
     interval = (max_bfactor - min_bfactor) / (num_colors - 1)
 
-    # Generate list of (bfactor_value, color) tuples
     color_stops = []
     for i, color in enumerate(colors):
         bfactor_value = round(min_bfactor + i * interval, 2)
         color_stops.append((bfactor_value, color))
 
-    # Construct the palette mapping string with B-factor values first, then colors
     palette_mapping = ":".join([f"{bfactor},{color}" for bfactor, color in color_stops])
 
-    # Construct the color byattribute command
-    color_command = f"color byattribute a:bfactor #1-{num_models} target absc palette {palette_mapping}"
-
-    return color_command
+    return f"color byattribute a:bfactor #1-{num_models} target absc palette {palette_mapping}"
 
 
 def extract_bfactor_range(pdb_file_paths):
     """
     Extracts the minimum and maximum B-factor values from the given PDB files.
-
-    Args:
-        pdb_file_paths (list): List of full file paths to PDB files.
-
-    Returns:
-        tuple: (min_bfactor, max_bfactor)
     """
     min_bfactor = float('inf')
     max_bfactor = float('-inf')
@@ -268,9 +249,8 @@ def extract_bfactor_range(pdb_file_paths):
             print(f"Error reading file '{path}': {e}")
             continue
 
-    # Handle cases where no B-factors were found
     if min_bfactor == float('inf') or max_bfactor == float('-inf'):
-        min_bfactor, max_bfactor = 0.00, 1.00  # Default values
+        min_bfactor, max_bfactor = 0.00, 1.00
 
     return min_bfactor, max_bfactor
 
@@ -278,59 +258,32 @@ def extract_bfactor_range(pdb_file_paths):
 def find_pdb_files(directory, pattern=r'^slice_(\d+)_first_frame\.pdb$'):
     """
     Finds all PDB files in the specified directory matching the given regex pattern.
-
-    Args:
-        directory (str): The directory to search in.
-        pattern (str): The regex pattern to match filenames.
-
-    Returns:
-        list: A list of matching filenames.
     """
     try:
-        # List all entries in the directory
         entries = os.listdir(directory)
     except Exception as e:
         print(f"Error accessing directory '{directory}': {e}")
         sys.exit(1)
 
-    # Compile the regex pattern
     regex = re.compile(pattern)
-
-    # Filter files matching the regex
-    pdb_files = [f for f in entries if os.path.isfile(os.path.join(directory, f)) and regex.match(f)]
-
-    return pdb_files
+    return [f for f in entries if os.path.isfile(os.path.join(directory, f)) and regex.match(f)]
 
 
 def natural_sort_key(s):
     """
-    Generates a key for natural sorting of strings containing numbers.
-
-    Args:
-        s (str): The string to generate a sort key for.
-
-    Returns:
-        list: A list of integers and lowercase strings for sorting.
+    Natural sorting for slice numbers.
     """
-    return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
 
 
-def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=None, spacingFactor=1,
-                 extra_commands=None):
+# -------------------------------------------------------------------------
+# ------------------------- Flipbook MAIN FUNCTION -------------------------
+# -------------------------------------------------------------------------
+
+def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=None,
+                 spacingFactor=1, extra_commands=None, viewer='chimerax'):
     """
-    Executes the flipbook functionality to open PDB files in ChimeraX with specified settings.
-    An optional extra_commands parameter allows you to append custom ChimeraX commands.
-
-    Args:
-        directory (str): Path to the directory containing PDB files.
-        palette (str): Color palette to use for coloring the models.
-        min_bfactor (float, optional): Minimum B-factor value. If None, auto-detect.
-        max_bfactor (float, optional): Maximum B-factor value. If None, auto-detect.
-        spacingFactor (int, optional): The spacing factor used in tiling.
-        extra_commands (list or str, optional): Additional ChimeraX commands to run after the default commands.
-
-    Returns:
-        None
+    Executes the flipbook functionality to open PDB files in the chosen viewer.
     """
     palette_name = palette
     provided_min_bfactor = min_bfactor
@@ -389,15 +342,97 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
         f"save {directory}/rmsx_{palette}.png width 2000 height 1000 supersample 3 transparentBackground true"
     ]
 
-    # Append custom extra commands, if provided.
     if extra_commands:
         if isinstance(extra_commands, str):
             extra_commands = [extra_commands]
         default_commands.extend(extra_commands)
 
+    #
+    # =====================================================================
+    # --------------------------- VMD BACKEND -----------------------------
+    # =====================================================================
+    #
+    if viewer.lower() == "vmd":
+        print("[flipbook] Using VMD backend (PTY Mode)...")
+
+        # 1. Define the PTY reader thread function
+        #    This runs in the background to read VMD's output
+        def pty_reader(fd):
+            """Reads output from the PTY's master file descriptor."""
+            try:
+                while True:
+                    data_b = os.read(fd, 1024)
+                    if not data_b:
+                        break  # PTY closed
+                    # Optional: uncomment below to see VMD's live output
+                    # print(f"[VMD PTY]: {data_b.decode('utf-8', errors='ignore').rstrip()}")
+            except Exception:
+                pass # This will error when the process closes, which is normal
+            finally:
+                os.close(fd)
+
+        vmd_loader = os.path.join(
+            os.path.dirname(__file__),
+            "vmd_scripts",
+            "wait_to_load.tcl"
+        )
+        # "grid_color_scale_centered_xaxis_hotkeys.tcl"
+        if not os.path.exists(vmd_loader):
+            print(f"[flipbook] ERROR: VMD loader script not found at: {vmd_loader}")
+            sys.exit(1)
+
+        try:
+            vmd_exec = find_vmd_executable()
+
+            # Build the simple, original command
+            cmd = [
+                vmd_exec,
+                "-dispdev", "win",
+                "-e", vmd_loader,
+                "-args",
+                *pdb_file_paths,
+                palette_name]
+
+            print(f"[flipbook] Launching VMD in PTY:\n  {' '.join(cmd)}")
+
+            # 2. Create the pseudo-terminal
+            master_fd, slave_fd = pty.openpty()
+
+            # 3. Launch VMD, attaching it to the PTY
+            process = subprocess.Popen(
+                cmd,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                start_new_session=True,
+                close_fds=True
+            )
+
+            # 4. Close the slave end, VMD's process now owns it
+            os.close(slave_fd)
+
+            # 5. Start the background thread to read from our end
+            reader_thread = threading.Thread(
+                target=pty_reader,
+                args=(master_fd,),
+                daemon=True # Ensures thread exits when main script exits
+            )
+            reader_thread.start()
+
+        except Exception as e:
+            print(f"[flipbook] VMD PTY launch failed: {e}")
+            sys.exit(1)
+
+        return  # Prevent ChimeraX execution path
+
+    #
+    # =====================================================================
+    # ------------------------- CHIMERAX BACKEND --------------------------
+    # =====================================================================
+    #
+
     chimera_commands = f"{open_commands} ; " + " ; ".join(default_commands)
 
-    # ---- use auto-detected ChimeraX executable instead of hardcoded 'chimerax'
     try:
         chx_exec = _which_chimerax()
     except FileNotFoundError as e:
@@ -408,7 +443,8 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
     print(f"[flipbook] Launching: {cmd[0]}")
 
     try:
-        subprocess.run(cmd, check=True)
+        # Use Popen to unblock the notebook, just like we do for VMD
+        subprocess.Popen(cmd, start_new_session=True)
     except FileNotFoundError:
         print("Error: ChimeraX executable not found or not executable.")
         sys.exit(1)
@@ -420,6 +456,10 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
         sys.exit(1)
 
 
+# -------------------------------------------------------------------------
+# --------------------------- CLI INTERFACE -------------------------------
+# -------------------------------------------------------------------------
+
 def main():
     parser = argparse.ArgumentParser(
         description='Open PDB files in ChimeraX in numerical order and apply dynamic coloring and tiling.')
@@ -428,7 +468,8 @@ def main():
                         help='Color palette to use for coloring the models.')
     parser.add_argument('--min_bfactor', type=float, default=None, help='Minimum B-factor value.')
     parser.add_argument('--max_bfactor', type=float, default=None, help='Maximum B-factor value.')
-    # Allow extra commands to be specified on the command line; these will be appended.
+    parser.add_argument('--viewer', type=str, default='chimerax', choices=['chimerax', 'vmd'],
+                        help='Choose visualization backend.')
     parser.add_argument('--extra-commands', type=str, nargs='+', default=[],
                         help='Extra ChimeraX commands to run after the default commands.')
     args = parser.parse_args()
@@ -438,7 +479,8 @@ def main():
         palette=args.palette,
         min_bfactor=args.min_bfactor,
         max_bfactor=args.max_bfactor,
-        extra_commands=args.extra_commands
+        extra_commands=args.extra_commands,
+        viewer=args.viewer
     )
 
 
