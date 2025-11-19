@@ -558,6 +558,42 @@ def analyze_trajectory(output_dir, chain_sele=None):
     """(Not used in this approach.)"""
     return pd.DataFrame()
 
+#
+# def file_namer(
+#     output_dir,
+#     example_file,
+#     out_file_type="csv",
+#     prefix="rmsx",
+#     u=None,
+#     frames_used=None,
+#     manual_length_ns=None
+# ):
+#     """
+#     Generate a filename based on simulation parameters.
+#
+#     If manual_length_ns is provided, override the auto-calculated length.
+#     """
+#     if manual_length_ns is not None:
+#         simulation_length_ns = manual_length_ns
+#     else:
+#         simulation_length_fs = extract_simulation_length(u, frames_used=frames_used)
+#         simulation_length_ns = simulation_length_fs / 1e6
+#
+#     sim_name = os.path.basename(example_file)
+#     sim_name = os.path.splitext(sim_name)[0]
+#
+#     if simulation_length_ns == 0:
+#         decimals = 3
+#     elif simulation_length_ns < 0.001:
+#         decimals = 6
+#     elif simulation_length_ns < 0.01:
+#         decimals = 5
+#     else:
+#         decimals = 3
+#
+#     output_filename = f'{prefix}_{sim_name}_{simulation_length_ns:.{decimals}f}_ns.{out_file_type}'
+#     output_filepath = os.path.join(output_dir, output_filename)
+#     return output_filepath
 
 def file_namer(
     output_dir,
@@ -566,18 +602,66 @@ def file_namer(
     prefix="rmsx",
     u=None,
     frames_used=None,
-    manual_length_ns=None
+    manual_length_ns=None,
+    manual_length=None,
+    manual_unit="ns",
+    start_frame=0,
 ):
     """
     Generate a filename based on simulation parameters.
 
-    If manual_length_ns is provided, override the auto-calculated length.
+    Priority for simulation length:
+    1) manual_length_ns (explicit ns, deprecated but supported)
+    2) manual_length + manual_unit (fs / ps / ns)
+    3) inferred from the trajectory via extract_simulation_length()
+
+    Parameters
+    ----------
+    output_dir : str
+    example_file : str
+    out_file_type : str
+    prefix : str
+    u : MDAnalysis.Universe or None
+    frames_used : int or None
+    manual_length_ns : float or None
+        If given, use this as the simulation length in ns (legacy shortcut).
+    manual_length : float or None
+        If given, use this as the simulation length in manual_unit.
+    manual_unit : {"fs", "ps", "ns"}
+        Unit for manual_length.
+    start_frame : int
+        First frame used in the analysis window.
     """
+    # 1) Highest priority: explicit manual length in ns
     if manual_length_ns is not None:
-        simulation_length_ns = manual_length_ns
+        simulation_length_ns = float(manual_length_ns)
+
+    # 2) Next: manual length in an arbitrary unit
+    elif manual_length is not None:
+        manual_unit = manual_unit.lower()
+        val = float(manual_length)
+        if manual_unit == "ns":
+            simulation_length_ns = val
+        elif manual_unit == "ps":
+            simulation_length_ns = val / 1000.0
+        elif manual_unit == "fs":
+            simulation_length_ns = val / 1.0e6
+        else:
+            # Unknown unit: assume ps
+            simulation_length_ns = val / 1000.0
+
+    # 3) Otherwise infer from the trajectory
     else:
-        simulation_length_fs = extract_simulation_length(u, frames_used=frames_used)
-        simulation_length_ns = simulation_length_fs / 1e6
+        if u is None:
+            # Last-resort: no Universe given; just set 0
+            simulation_length_ns = 0.0
+        else:
+            simulation_length_ns = extract_simulation_length(
+                u,
+                start_frame=start_frame,
+                frames_used=frames_used,
+                target_unit="ns",
+            )
 
     sim_name = os.path.basename(example_file)
     sim_name = os.path.splitext(sim_name)[0]
@@ -591,21 +675,104 @@ def file_namer(
     else:
         decimals = 3
 
-    output_filename = f'{prefix}_{sim_name}_{simulation_length_ns:.{decimals}f}_ns.{out_file_type}'
+    output_filename = f"{prefix}_{sim_name}_{simulation_length_ns:.{decimals}f}_ns.{out_file_type}"
     output_filepath = os.path.join(output_dir, output_filename)
     return output_filepath
 
 
-def extract_simulation_length(u, frames_used=None):
+
+# def extract_simulation_length(u, frames_used=None):
+#     """
+#     Extract simulation length in fs based on frames_used.
+#     If frames_used is None, use entire trajectory.
+#     """
+#     timestep_fs = u.trajectory.dt * 1000.0
+#     if frames_used is None:
+#         frames_used = len(u.trajectory)
+#     total_time_fs = timestep_fs * frames_used
+#     return total_time_fs
+
+def extract_simulation_length(u, start_frame=0, frames_used=None, target_unit="ns"):
     """
-    Extract simulation length in fs based on frames_used.
-    If frames_used is None, use entire trajectory.
+    Infer the *elapsed* simulation time for the analyzed window.
+
+    Parameters
+    ----------
+    u : MDAnalysis.Universe
+        Universe that holds the trajectory.
+    start_frame : int, optional
+        Index of the first frame used in the analysis.
+    frames_used : int or None, optional
+        Number of frames actually used in the analysis (after truncation).
+        If None, use all frames from start_frame to the end.
+    target_unit : {"fs", "ps", "ns"}, optional
+        Unit to return. Default is "ns".
+
+    Returns
+    -------
+    length : float
+        Elapsed time between the first and last *used* frame, in target_unit.
     """
-    timestep_fs = u.trajectory.dt * 1000.0
+    n_frames = len(u.trajectory)
+    if n_frames == 0:
+        return 0.0
+
+    if start_frame < 0:
+        start_frame = 0
+    if start_frame >= n_frames:
+        return 0.0
+
     if frames_used is None:
-        frames_used = len(u.trajectory)
-    total_time_fs = timestep_fs * frames_used
-    return total_time_fs
+        frames_used = n_frames - start_frame
+
+    last_idx = start_frame + frames_used - 1
+    if last_idx >= n_frames:
+        last_idx = n_frames - 1
+
+    if last_idx <= start_frame:
+        return 0.0
+
+    u.trajectory[start_frame]
+    t0 = u.trajectory.ts.time
+    u.trajectory[last_idx]
+    t1 = u.trajectory.ts.time
+
+    elapsed = float(t1 - t0)
+
+    # Try to read units from the trajectory; fall back to ps
+    time_unit = None
+    try:
+        time_unit = getattr(u.trajectory, "units", {}).get("time", None)
+    except Exception:
+        time_unit = None
+
+    if time_unit is None:
+        time_unit = "ps"
+
+    time_unit = time_unit.lower()
+
+    # normalize to ps
+    if time_unit in ("ps", "picosecond", "picoseconds"):
+        elapsed_ps = elapsed
+    elif time_unit in ("fs", "femtosecond", "femtoseconds"):
+        elapsed_ps = elapsed / 1000.0
+    elif time_unit in ("ns", "nanosecond", "nanoseconds"):
+        elapsed_ps = elapsed * 1000.0
+    else:
+        # unknown → assume ps
+        elapsed_ps = elapsed
+
+    target_unit = target_unit.lower()
+    if target_unit == "ps":
+        return elapsed_ps
+    elif target_unit == "fs":
+        return elapsed_ps * 1000.0
+    elif target_unit == "ns":
+        return elapsed_ps / 1000.0
+    else:
+        # unknown → return ps
+        return elapsed_ps
+
 
 
 def calculate_rmsd(
