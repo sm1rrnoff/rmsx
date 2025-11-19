@@ -1,4 +1,4 @@
-rmsx/addons/READMEThis note shows how to bolt a new analysis method onto the RMSX/Flipbook pipeline, using a per-residue lDDT time-series as the example.
+# This note shows how to bolt a new analysis method onto the RMSX/Flipbook pipeline, using a per-residue lDDT time-series as the example.
 
 Goals:
 
