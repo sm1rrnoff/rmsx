@@ -255,6 +255,143 @@ def setup_directory(output_dir, overwrite=False, verbose=True):
         raise RuntimeError("User chose not to overwrite the existing directory.")
 
 
+def process_trajectory_slices_by_size(
+        u,
+        output_dir,
+        total_size,
+        slice_size,
+        chain_sele=None,
+        start_frame=0,
+        analysis_type="protein",
+        verbose=True,
+        full_backbone=False,
+):
+    """
+    Slice the trajectory based on a fixed number of frames per slice, ensuring all
+    slices have the same size (slice_size). Truncate excess frames if total_size
+    is not divisible by slice_size.
+
+    Parameters
+    ----------
+    u : MDAnalysis.Universe
+        Loaded MD trajectory.
+    output_dir : str
+        Path to the directory where per-slice results are saved.
+    total_size : int
+        Total number of frames in the analyzed range.
+    slice_size : int
+        Number of frames per slice.
+    chain_sele : str, optional
+        Chain ID (segid) to restrict analysis to a specific chain.
+    start_frame : int, optional
+        Index of the first frame to analyze.
+    analysis_type : str, optional
+        "protein" or "dna", determines atom selection.
+    verbose : bool, optional
+        Print progress and details if True.
+    full_backbone : bool, optional
+        If True, select backbone atoms (N, CA, C, O) instead of CA-only for the
+        PDB output; RMSF is always computed on CA atoms.
+    """
+    if slice_size <= 0:
+        raise ValueError("slice_size must be a positive integer.")
+
+    adjusted_total_size = (total_size // slice_size) * slice_size
+    excess_frames = total_size - adjusted_total_size
+
+    if excess_frames > 0:
+        if verbose:
+            print(
+                f"Truncating {excess_frames} excess frame(s). "
+                f"Original size: {total_size}, Updated: {adjusted_total_size}"
+            )
+        total_size = adjusted_total_size
+    else:
+        if verbose:
+            print(f"No truncation needed. Total size: {total_size} frames")
+
+    n_slices = total_size // slice_size
+    if n_slices == 0:
+        raise ValueError(
+            "Slice size is larger than the total number of frames "
+            "available in the chosen range."
+        )
+
+    if verbose:
+        print(
+            f"Processing frames {start_frame} to "
+            f"{start_frame + total_size - 1} of the trajectory."
+        )
+        print(f"Number of slices: {n_slices}")
+
+    selection_str = get_selection_string(
+        analysis_type=analysis_type,
+        chain_sele=chain_sele,
+        full_backbone=full_backbone,
+    )
+
+    all_data = pd.DataFrame()
+
+    for i in range(n_slices):
+        slice_start = start_frame + i * slice_size
+        slice_end = slice_start + slice_size  # stop is exclusive in RMSF.run
+
+        # Move trajectory and get selection
+        u.trajectory[slice_start]
+        atoms_to_analyze = u.select_atoms(selection_str)
+        if len(atoms_to_analyze) == 0:
+            raise ValueError(
+                f"Selection returned empty at frame {slice_start}. "
+                f"Check your selection or coordinate file."
+            )
+
+        # Write representative structure for this slice (full selection)
+        coord_path = os.path.join(output_dir, f"slice_{i + 1}_first_frame.pdb")
+        with mda.Writer(coord_path, atoms_to_analyze.n_atoms, multiframe=False) as w:
+            w.write(atoms_to_analyze)
+        if verbose:
+            print(f"First frame of slice {i + 1} written to {coord_path}")
+
+        # Compute RMSF only for CA atoms (one per residue)
+        ca_atoms = atoms_to_analyze.select_atoms("name CA")
+        if len(ca_atoms) == 0:
+            raise ValueError(
+                f"No CA atoms found for selection '{selection_str}' "
+                f"in slice {i + 1} (chain={chain_sele})."
+            )
+
+        rmsf_calc = RMSF(ca_atoms)
+        rmsf_calc.run(start=slice_start, stop=slice_end)
+
+        df = pd.DataFrame(
+            {f"slice_{i + 1}.dcd": rmsf_calc.results.rmsf},
+            index=[res.resid for res in ca_atoms.residues],
+        )
+
+        all_data = pd.concat([all_data, df], axis=1) if not all_data.empty else df
+
+        if verbose:
+            print(
+                f"Slice {i + 1}: RMSF computed for frames "
+                f"{slice_start} to {slice_end - 1} ({slice_size} frames)"
+            )
+
+    # Add residue and chain metadata (using CA residues)
+    if not all_data.empty:
+        all_data.insert(
+            0,
+            "ChainID",
+            [res.atoms[0].segid for res in ca_atoms.residues],
+        )
+        all_data.insert(
+            0,
+            "ResidueID",
+            [res.resid for res in ca_atoms.residues],
+        )
+
+    return all_data, adjusted_total_size
+
+
 # def process_trajectory_slices_by_size(
 #     u,
 #     output_dir,
@@ -872,7 +1009,8 @@ def create_r_plot(
         max_val=None,
         log_transform=True,
         custom_fill_label="",
-        verbose=True
+        verbose=True,
+        window_check=False,
 ):
     """
     Run the R script to generate RMSX plots and display the first image.
@@ -881,6 +1019,8 @@ def create_r_plot(
     interpolate_str   = 'TRUE' if interpolate else 'FALSE'
     triple_str        = 'TRUE' if triple else 'FALSE'
     log_transform_str = 'TRUE' if log_transform else 'FALSE'
+    window_check_str = 'TRUE' if window_check else 'FALSE'
+
 
     # 0) Quick sanity check for Rscript (with a simple Windows fallback)
     def _works(path: str) -> bool:
@@ -948,7 +1088,8 @@ def create_r_plot(
             "" if min_val is None else str(min_val),
             "" if max_val is None else str(max_val),
             log_transform_str,
-            custom_fill_label
+            custom_fill_label,
+            window_check_str
         ]
 
         if verbose:
@@ -1227,6 +1368,7 @@ def run_rmsx(
         manual_length_ns=None,
         log_transform=False,
         full_backbone=True,
+        window_check=False,
         custom_fill_label=""
 ):
     """
@@ -1236,6 +1378,9 @@ def run_rmsx(
     -----------
     - custom_fill_label : str
          Optional custom label to override the default fill label in the plot.
+    - window_check : bool
+        If True, tell the R script to use the stacked RMSD + per-slice mean + heatmap layout.
+
 
     (Other parameters remain as documented previously.)
     """
@@ -1311,19 +1456,35 @@ def run_rmsx(
             full_backbone=full_backbone
         )
 
+    # updated
+    if num_slices is not None:
+        if verbose:
+            print(f"Using the slicing method with num_slices={num_slices}")
+        all_data, adjusted_total_size = process_trajectory_slices_by_num(
+            u,
+            chain_output_dir,
+            used_frames_count,
+            num_slices,
+            chain_sele=chain_sele,
+            start_frame=start_frame,
+            analysis_type=analysis_type,
+            verbose=verbose,
+            full_backbone=full_backbone,
+        )
+
     elif slice_size is not None:
         if verbose:
             print(f"Using the slicing method with slice_size={slice_size}")
-        # all_data, adjusted_total_size = process_trajectory_slices_by_size(
-        #     u, chain_output_dir, used_frames_count, slice_size,
-        #     chain_sele=chain_sele, start_frame=start_frame,
-        #     analysis_type=analysis_type, verbose=verbose
-        # )
-        all_data, adjusted_total_size = process_trajectory_slices_by_num(
-            u, chain_output_dir, used_frames_count, num_slices,
-            chain_sele=chain_sele, start_frame=start_frame,
-            analysis_type=analysis_type, verbose=verbose,
-            full_backbone=full_backbone
+        all_data, adjusted_total_size = process_trajectory_slices_by_size(
+            u,
+            chain_output_dir,
+            used_frames_count,
+            slice_size,
+            chain_sele=chain_sele,
+            start_frame=start_frame,
+            analysis_type=analysis_type,
+            verbose=verbose,
+            full_backbone=full_backbone,
         )
     else:
         if verbose:
@@ -1366,6 +1527,7 @@ def run_rmsx(
             palette=palette,
             verbose=verbose,
             log_transform=log_transform,
+            window_check=window_check,
             custom_fill_label=custom_fill_label  # Passing the custom label
         )
     else:
@@ -1389,7 +1551,8 @@ def run_rmsx(
 def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=None, slice_size=None,
                    rscript_executable='Rscript', verbose=True, interpolate=True, triple=False, overwrite=False,
                    palette='viridis', start_frame=0, end_frame=None, sync_color_scale=False,
-                   analysis_type="protein", manual_length_ns=None, summary_n=3, log_transform=False, full_backbone=False, custom_fill_label=""):
+                   analysis_type="protein", manual_length_ns=None, summary_n=3, log_transform=False, full_backbone=False,
+                   window_check=False, custom_fill_label=""):
     """
     Perform RMSX analysis for all chains in the topology file.
 
@@ -1470,6 +1633,7 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
             manual_length_ns=manual_length_ns,
             log_transform=log_transform,
             full_backbone=full_backbone,
+            window_check=window_check,
             custom_fill_label=custom_fill_label  # Passing the custom label
         )
 
@@ -1976,6 +2140,7 @@ def run_shift_map(
         manual_length_ns=None,
         log_transform=False,
         full_backbone=False,
+        window_check=False,
         custom_fill_label=shift_fill_text
 ):
     """
@@ -1991,6 +2156,9 @@ def run_shift_map(
          Optional custom label to override the default fill label in the plot.
     - chain_sele : str or None
          If not provided, the function will prompt the user to select one from the available chains.
+      - window_check : bool
+        If True, use the stacked RMSD + per-slice mean + heatmap layout for the shift map.
+
     """
     initialize_environment(verbose=verbose)
 
@@ -2099,6 +2267,7 @@ def run_shift_map(
             palette=palette,
             verbose=verbose,
             log_transform=log_transform,
+            window_check=window_check,
             custom_fill_label=custom_fill_label  # Passing the custom label
         )
     else:
@@ -2116,27 +2285,6 @@ def run_shift_map(
 
 
 
-# def all_chain_shift_map(
-#         topology_file,
-#         trajectory_file,
-#         output_dir=None,
-#         num_slices=None,
-#         slice_size=None,
-#         rscript_executable='Rscript',
-#         verbose=True,
-#         interpolate=True,
-#         triple=False,
-#         overwrite=False,
-#         palette='viridis',
-#         start_frame=0,
-#         end_frame=None,
-#         sync_color_scale=False,
-#         analysis_type="protein",
-#         manual_length_ns=None,
-#         summary_n=3,
-#         log_transform=False,
-#         custom_fill_label=shift_fill_text ###
-# ):
 def all_chain_shift_map(
         topology_file,
         trajectory_file,
@@ -2157,6 +2305,7 @@ def all_chain_shift_map(
         summary_n=3,
         log_transform=False,
         full_backbone=False,
+        window_check=False,
         custom_fill_label=shift_fill_text  ###
 ):
     """
@@ -2238,6 +2387,7 @@ def all_chain_shift_map(
             manual_length_ns=manual_length_ns,
             log_transform=log_transform,
             full_backbone=full_backbone,
+            window_check=window_check,
             custom_fill_label=custom_fill_label  # Passing the custom label
         )
 
