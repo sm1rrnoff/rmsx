@@ -1,4 +1,5 @@
-# RMSDxRMSF = RMSX
+# RMSX and Flipbook: Simple-to-use, high-resolution mapping of molecular motions over time
+
 RMSX combines the features of RMSD and RMSF into a simple-to-understand and simple-to-implement tool for understanding how proteins move. It can work with simulation files from across MD simulation suites (e.g., GROMACS and NAMD, Amber etc.) and is much faster than other visualization methods while delivering publication-ready images out of the box. 
 
 
@@ -144,6 +145,7 @@ run_rmsx_flipbook(
 
 
 ![Protease RMSX and Flipbook Example](protease_rmsx_flipbook_overview.png)
+
 
 
 
