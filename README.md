@@ -12,7 +12,7 @@ RMSX combines the features of RMSD and RMSF into a simple-to-understand and simp
 - [**R**](https://cran.r-project.org/) installed and in your PATH (the `Rscript` command must be available).
 - [**ChimeraX**](https://www.cgl.ucsf.edu/chimerax/download.html) Simplest option if you plan to use the **Flipbook** 3D visualization.
 - _or:_
-- [**VMD**](https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=VMD) Advanced **Flipbook** option for photorealistic rendering, occlusion, and ray tracing. 
+- [**VMD**](https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=VMD) Advanced **Flipbook** option for photorealistic rendering, depth cueing, occlusion, and ray tracing. 
 - The RMSX code will attempt to install R packages like `ggplot2`, `viridis`, `dplyr`, etc., if they’re missing.
 
 
@@ -147,6 +147,7 @@ run_rmsx_flipbook(
 
 
 ![Protease RMSX and Flipbook Example](protease_rmsx_flipbook_overview.png)
+
 
 
 
