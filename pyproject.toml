@@ -18,9 +18,9 @@ dependencies = [
 [project.scripts]
 rmsx = "rmsx.cli:main"
 
-[tool.setuptools]
-packages = ["rmsx"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rmsx*"]
 
 [tool.setuptools.package-data]
-rmsx = ["r_scripts/*.R", "commands.cxc"]
-
+rmsx = ["r_scripts/*.R", "commands.cxc", "vmd_scripts/*.tcl"]

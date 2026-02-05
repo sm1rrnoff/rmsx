@@ -90,9 +90,18 @@ import subprocess
 import glob
 import shutil
 import numpy as np
-import plotly.graph_objects as go
 
-from IPython.display import Image, display
+try:
+    from IPython.display import Image as _IPyImage  # type: ignore
+    from IPython.display import display as _ipy_display  # type: ignore
+except Exception:  # pragma: no cover
+    _IPyImage = None
+
+    def _ipy_display(*_args, **_kwargs):  # type: ignore[no-redef]
+        return None
+
+Image = _IPyImage
+display = _ipy_display
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -993,10 +1002,6 @@ def calculate_rmsf(
 
 
 
-import sys, re, subprocess
-from pathlib import Path
-from IPython.display import Image, display
-
 def create_r_plot(
         rmsx_csv,
         rmsd_csv,
@@ -1135,6 +1140,10 @@ def create_r_plot(
             first_image = image_files[0]
             if verbose:
                 print(f"Displaying image: {first_image}")
+            if Image is None:
+                if verbose:
+                    print("IPython is not available; skipping inline image display.")
+                return True
             display(Image(filename=str(first_image)))
             return True
         else:
@@ -2439,5 +2448,3 @@ def all_chain_shift_map(
             )
 
     return combined_dir
-
-

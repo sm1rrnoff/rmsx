@@ -7,8 +7,11 @@
 
 # --- CONFIGURATION ---
 # ▼▼▼ EDIT THIS LINE ▼▼▼
-# Set the full path to your *main* script
-set main_script_path "./rmsx/vmd_scripts/grid_color_scale_centered_xaxis_hotkeys.tcl"
+# Set the path to your *main* script.
+# IMPORTANT: Resolve relative to *this* loader script so it works from any CWD
+# (e.g., when launched from Jupyter notebooks).
+set script_dir [file dirname [info script]]
+set main_script_path [file join $script_dir "grid_color_scale_centered_xaxis_hotkeys.tcl"]
 # --- END CONFIGURATION ---
 
 
@@ -29,8 +32,13 @@ set additional_delay_ms 1500
 # --- FIX ---
 # Set the modulation environment variable IMMEDIATELY.
 # This must be done *before* VMD becomes idle, or it will be ignored.
-set env(VMDMODULATENEWTUBE) user
-puts "--- Set env(VMDMODULATENEWTUBE) to 'user' (during init) ---"
+# RMSX's main script uses:
+#  - 'user'  for color
+#  - 'user2' for thickness modulation
+set env(VMDMODULATERIBBON) user2
+set env(VMDMODULATENEWTUBE) user2
+set env(VMDMODULATENEWCARTOON) user2
+puts "--- Set env(VMDMODULATE*) to 'user2' (during init) ---"
 # --- END FIX ---
 
 # This procedure will run after the delay
@@ -44,7 +52,7 @@ proc run_main_script_after_delay {} {
     # Check if the file exists before trying to run it
     if {![file exists $main_script_path]} {
         puts "ERROR: Main script not found at '$main_script_path'"
-        puts "Please edit loader.tcl and fix the 'main_script_path' variable."
+        puts "Please edit wait_to_load.tcl and fix the 'main_script_path' variable."
         return
     }
 
@@ -56,10 +64,8 @@ proc run_main_script_after_delay {} {
     puts "--- Main script has finished ---"
 }
 
-# --- MODIFIED COMMAND ---
-# Instead of 'after idle', we use our millisecond delay.
-# This will wait for VMD to be idle AND for $additional_delay_ms to pass.
-puts "--- Loader script armed. Main script will run after $additional_delay_ms ms. ---"
-after $additional_delay_ms run_main_script_after_delay
-
-
+# Arm the loader:
+# 1) wait until VMD becomes idle (startup + .vmdrc complete)
+# 2) wait an additional delay for slower systems / lots of files
+puts "--- Loader armed. Main script will run after VMD is idle + $additional_delay_ms ms. ---"
+after idle [list after $additional_delay_ms run_main_script_after_delay]

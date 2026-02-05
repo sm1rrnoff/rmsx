@@ -301,36 +301,36 @@ compute_window_check_correlations <- function(rmsx_raw, chain_id, rmsd_data, rms
     warning("RMSX CSV missing 'ChainID'; skipping correlation calculation.")
     return(invisible(NULL))
   }
-  
+
   rmsx_chain <- rmsx_raw %>% filter(ChainID == chain_id)
   if (nrow(rmsx_chain) == 0) {
     warning("No rows for ChainID ", chain_id, " in RMSX CSV; skipping correlations.")
     return(invisible(NULL))
   }
-  
+
   slice_cols <- setdiff(names(rmsx_chain), c("ResidueID", "ChainID"))
   if (length(slice_cols) < 1L) {
     warning("No slice columns found for ChainID ", chain_id, "; skipping correlations.")
     return(invisible(NULL))
   }
-  
+
   # 1) Residue-level: RMSF vs mean RMSX ------------------------------
   mean_rmsx_res <- rmsx_chain %>%
     mutate(mean_RMSX = rowMeans(across(all_of(slice_cols)), na.rm = TRUE)) %>%
     select(ResidueID, mean_RMSX)
-  
+
   rmsf_chain <- rmsf_data
   if ("ChainID" %in% names(rmsf_chain) && !is.na(chain_id)) {
     rmsf_chain <- rmsf_chain %>% filter(ChainID == chain_id)
   }
-  
+
   r_res  <- NA_real_
   r2_res <- NA_real_
   if (all(c("ResidueID", "RMSF") %in% names(rmsf_chain))) {
     res_join <- rmsf_chain %>%
       select(ResidueID, RMSF) %>%
       inner_join(mean_rmsx_res, by = "ResidueID")
-    
+
     if (nrow(res_join) > 0) {
       r_res  <- suppressWarnings(cor(res_join$RMSF, res_join$mean_RMSX, use = "complete.obs"))
       r2_res <- r_res^2
@@ -340,7 +340,7 @@ compute_window_check_correlations <- function(rmsx_raw, chain_id, rmsd_data, rms
   } else {
     warning("RMSF CSV missing 'ResidueID' or 'RMSF' for residue-level correlation.")
   }
-  
+
   # 2) Global-level: mean RMSX per slice vs mean RMSD per slice -------
   means <- colMeans(rmsx_chain[, slice_cols, drop = FALSE], na.rm = TRUE)
   mean_rmsx_slice <- data.frame(
@@ -349,7 +349,7 @@ compute_window_check_correlations <- function(rmsx_raw, chain_id, rmsd_data, rms
     stringsAsFactors = FALSE
   )
   n_slices <- nrow(mean_rmsx_slice)
-  
+
   r_glob  <- NA_real_
   r2_glob <- NA_real_
   if (!("RMSD" %in% names(rmsd_data))) {
@@ -364,33 +364,33 @@ compute_window_check_correlations <- function(rmsx_raw, chain_id, rmsd_data, rms
       warning("RMSD CSV must have either 'Time' or 'Frame' for global correlation.")
       t <- NULL
     }
-    
+
     if (!is.null(t)) {
       t <- t - min(t, na.rm = TRUE)
       t_max <- max(t, na.rm = TRUE)
       if (!is.finite(t_max) || t_max == 0) t_max <- 1
-      
+
       slice_len <- t_max / n_slices
       slice_index <- floor(t / slice_len) + 1L
       slice_index[slice_index > n_slices] <- n_slices
-      
+
       df <- data.frame(
         Slice = slice_index,
         RMSD  = rmsd_data$RMSD
       )
-      
+
       mean_rmsd_slice <- df %>%
         group_by(Slice) %>%
         summarise(mean_RMSD = mean(RMSD, na.rm = TRUE),
                   .groups = "drop")
-      
+
       all_slices <- data.frame(Slice = seq_len(n_slices))
       mean_rmsd_slice <- all_slices %>%
         left_join(mean_rmsd_slice, by = "Slice")
-      
+
       slice_join <- mean_rmsx_slice %>%
         inner_join(mean_rmsd_slice, by = "Slice")
-      
+
       if (nrow(slice_join) > 0) {
         r_glob  <- suppressWarnings(cor(slice_join$mean_RMSX, slice_join$mean_RMSD,
                                         use = "complete.obs"))
@@ -401,32 +401,165 @@ compute_window_check_correlations <- function(rmsx_raw, chain_id, rmsd_data, rms
       }
     }
   }
-  
-  # --- print summary to console (CLI or notebook) --------------------
-  cat("------------------------------------------------------------\n")
-  cat("Window-check correlations for ChainID ", chain_id, ":\n", sep = "")
-  if (!is.na(r_res)) {
-    cat(sprintf("  Residue-level (RMSF vs mean RMSX):      r = %.3f, R^2 = %.3f\n",
-                r_res, r2_res))
-  } else {
-    cat("  Residue-level (RMSF vs mean RMSX):      not available.\n")
-  }
-  if (!is.na(r_glob)) {
-    cat(sprintf("  Global-level (mean RMSX vs mean RMSD):  r = %.3f, R^2 = %.3f\n",
-                r_glob, r2_glob))
-  } else {
-    cat("  Global-level (mean RMSX vs mean RMSD):  not available.\n")
-  }
-  cat("------------------------------------------------------------\n")
-  
-  invisible(list(
-    r_residue  = r_res,
-    r2_residue = r2_res,
-    r_global   = r_glob,
-    r2_global  = r2_glob,
-    n_slices   = n_slices
-  ))
 }
+
+# ---- NEW: compute correlations for window_check ---------------------
+# Uses the wide-format rmsx_raw (with ResidueID, ChainID, slice_* columns),
+# plus RMSD and RMSF CSVs, to compute:
+#   1) Residue-level correlation: RMSF vs mean RMSX (across slices)
+#   2) Global correlation: per-frame RMSD vs mean RMSX of that frame's slice
+# compute_window_check_correlations <- function(rmsx_raw, chain_id, rmsd_data, rmsf_data) {
+#   if (!("ResidueID" %in% names(rmsx_raw))) {
+#     warning("RMSX CSV missing 'ResidueID'; skipping correlation calculation.")
+#     return(invisible(NULL))
+#   }
+#   if (!("ChainID" %in% names(rmsx_raw))) {
+#     warning("RMSX CSV missing 'ChainID'; skipping correlation calculation.")
+#     return(invisible(NULL))
+#   }
+#   
+#   rmsx_chain <- rmsx_raw %>% filter(ChainID == chain_id)
+#   if (nrow(rmsx_chain) == 0) {
+#     warning("No rows for ChainID ", chain_id, " in RMSX CSV; skipping correlations.")
+#     return(invisible(NULL))
+#   }
+#   
+#   slice_cols <- setdiff(names(rmsx_chain), c("ResidueID", "ChainID"))
+#   if (length(slice_cols) < 1L) {
+#     warning("No slice columns found for ChainID ", chain_id, "; skipping correlations.")
+#     return(invisible(NULL))
+#   }
+#   
+#   # 1) Residue-level: RMSF vs mean RMSX ------------------------------
+#   mean_rmsx_res <- rmsx_chain %>%
+#     mutate(mean_RMSX = rowMeans(across(all_of(slice_cols)), na.rm = TRUE)) %>%
+#     select(ResidueID, mean_RMSX)
+#   
+#   rmsf_chain <- rmsf_data
+#   if ("ChainID" %in% names(rmsf_chain) && !is.na(chain_id)) {
+#     rmsf_chain <- rmsf_chain %>% filter(ChainID == chain_id)
+#   }
+#   
+#   r_res  <- NA_real_
+#   r2_res <- NA_real_
+#   if (all(c("ResidueID", "RMSF") %in% names(rmsf_chain))) {
+#     res_join <- rmsf_chain %>%
+#       select(ResidueID, RMSF) %>%
+#       inner_join(mean_rmsx_res, by = "ResidueID")
+#     
+#     if (nrow(res_join) > 0) {
+#       r_res  <- suppressWarnings(cor(res_join$RMSF, res_join$mean_RMSX, use = "complete.obs"))
+#       r2_res <- r_res^2
+#     } else {
+#       warning("No overlapping ResidueID between RMSF and RMSX for ChainID ", chain_id)
+#     }
+#   } else {
+#     warning("RMSF CSV missing 'ResidueID' or 'RMSF' for residue-level correlation.")
+#   }
+#   
+#   # 2) Global-level: per-frame RMSD vs mean RMSX of that frame's slice ----
+#   means <- colMeans(rmsx_chain[, slice_cols, drop = FALSE], na.rm = TRUE)
+#   mean_rmsx_slice <- data.frame(
+#     Slice     = seq_along(means),
+#     mean_RMSX = as.numeric(means),
+#     stringsAsFactors = FALSE
+#   )
+#   n_slices <- nrow(mean_rmsx_slice)
+#   
+#   r_glob  <- NA_real_
+#   r2_glob <- NA_real_
+#   if (!("RMSD" %in% names(rmsd_data))) {
+#     warning("RMSD CSV missing 'RMSD'; skipping global correlation.")
+#   } else {
+#     # Build a time axis from 'Time' (if present) or 'Frame'
+#     if ("Time" %in% names(rmsd_data) && all(is.finite(rmsd_data$Time))) {
+#       t <- rmsd_data$Time
+#     } else if ("Frame" %in% names(rmsd_data) && all(is.finite(rmsd_data$Frame))) {
+#       t <- rmsd_data$Frame
+#     } else {
+#       warning("RMSD CSV must have either 'Time' or 'Frame' for global correlation.")
+#       t <- NULL
+#     }
+#     
+#     if (!is.null(t)) {
+#       t <- t - min(t, na.rm = TRUE)
+#       t_max <- max(t, na.rm = TRUE)
+#       if (!is.finite(t_max) || t_max == 0) t_max <- 1
+#       
+#       slice_len   <- t_max / n_slices
+#       slice_index <- floor(t / slice_len) + 1L
+#       slice_index[slice_index > n_slices] <- n_slices
+#       
+#       # For each frame, attach the mean RMSX of its slice
+#       df <- data.frame(
+#         Slice = slice_index,
+#         RMSD  = rmsd_data$RMSD
+#       ) %>%
+#         left_join(mean_rmsx_slice, by = "Slice")
+#       
+#       valid <- is.finite(df$RMSD) & is.finite(df$mean_RMSX)
+#       if (any(valid)) {
+#         r_glob  <- suppressWarnings(cor(df$RMSD[valid], df$mean_RMSX[valid],
+#                                         use = "complete.obs"))
+#         r2_glob <- r_glob^2
+#       } else {
+#         warning("No finite pairs for global correlation (RMSD vs mean RMSX).")
+#       }
+#     }
+#   }
+#   
+#   # --- print summary to console (CLI or notebook) --------------------
+#   cat("------------------------------------------------------------\n")
+#   cat("Window-check correlations for ChainID ", chain_id, ":\n", sep = "")
+#   if (!is.na(r_res)) {
+#     cat(sprintf("  Residue-level (RMSF vs mean RMSX):            r = %.3f, R^2 = %.3f\n",
+#                 r_res, r2_res))
+#   } else {
+#     cat("  Residue-level (RMSF vs mean RMSX):            not available.\n")
+#   }
+#   if (!is.na(r_glob)) {
+#     cat(sprintf("  Global-level (RMSD vs mean RMSX(slice)):     r = %.3f, R^2 = %.3f\n",
+#                 r_glob, r2_glob))
+#   } else {
+#     cat("  Global-level (RMSD vs mean RMSX(slice)):     not available.\n")
+#   }
+#   cat("------------------------------------------------------------\n")
+#   
+#   invisible(list(
+#     r_residue  = r_res,
+#     r2_residue = r2_res,
+#     r_global   = r_glob,
+#     r2_global  = r2_glob,
+#     n_slices   = n_slices
+#   ))
+# }
+# 
+#   
+#   # --- print summary to console (CLI or notebook) --------------------
+#   cat("------------------------------------------------------------\n")
+#   cat("Window-check correlations for ChainID ", chain_id, ":\n", sep = "")
+#   if (!is.na(r_res)) {
+#     cat(sprintf("  Residue-level (RMSF vs mean RMSX):      r = %.3f, R^2 = %.3f\n",
+#                 r_res, r2_res))
+#   } else {
+#     cat("  Residue-level (RMSF vs mean RMSX):      not available.\n")
+#   }
+#   if (!is.na(r_glob)) {
+#     cat(sprintf("  Global-level (mean RMSX vs mean RMSD):  r = %.3f, R^2 = %.3f\n",
+#                 r_glob, r2_glob))
+#   } else {
+#     cat("  Global-level (mean RMSX vs mean RMSD):  not available.\n")
+#   }
+#   cat("------------------------------------------------------------\n")
+#   
+#   invisible(list(
+#     r_residue  = r_res,
+#     r2_residue = r2_res,
+#     r_global   = r_glob,
+#     r2_global  = r2_glob,
+#     n_slices   = n_slices
+#   ))
+# }
 
 # ---- main ------------------------------------------------------------------------------
 main <- function() {

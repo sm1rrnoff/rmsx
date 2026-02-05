@@ -53,8 +53,12 @@ import platform
 import shutil
 from pathlib import Path
 
-import pty  # <-- ADDED
-import threading  # <-- ADDED
+try:
+    import pty  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover (not available on Windows)
+    pty = None
+
+import threading
 
 from rmsx.vmd_scripts.vmd_finder import find_vmd_executable
 
@@ -262,8 +266,7 @@ def find_pdb_files(directory, pattern=r'^slice_(\d+)_first_frame\.pdb$'):
     try:
         entries = os.listdir(directory)
     except Exception as e:
-        print(f"Error accessing directory '{directory}': {e}")
-        sys.exit(1)
+        raise OSError(f"Error accessing directory '{directory}': {e}") from e
 
     regex = re.compile(pattern)
     return [f for f in entries if os.path.isfile(os.path.join(directory, f)) and regex.match(f)]
@@ -290,13 +293,13 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
     provided_max_bfactor = max_bfactor
 
     if not os.path.isdir(directory):
-        print(f"Error: '{directory}' is not a valid directory.")
-        sys.exit(1)
+        raise NotADirectoryError(f"'{directory}' is not a valid directory.")
 
     pdb_files = find_pdb_files(directory)
     if not pdb_files:
-        print(f"No files found matching pattern 'slice_<number>_first_frame.pdb' in directory '{directory}'.")
-        sys.exit(1)
+        raise FileNotFoundError(
+            f"No files found matching pattern 'slice_<number>_first_frame.pdb' in directory '{directory}'."
+        )
 
     pdb_files_sorted = sorted(pdb_files, key=natural_sort_key)
     pdb_file_paths = [os.path.join(directory, f) for f in pdb_files_sorted]
@@ -312,14 +315,12 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
 
     colors = COLOR_PALETTES.get(palette_name)
     if not colors:
-        print(f"Error: Palette '{palette_name}' is not defined.")
-        sys.exit(1)
+        raise ValueError(f"Palette '{palette_name}' is not defined.")
 
     try:
         color_command = create_color_mapping(palette_name, colors, min_bfactor, max_bfactor, num_models)
     except ValueError as ve:
-        print(ve)
-        sys.exit(1)
+        raise ValueError(str(ve)) from ve
 
     columns = num_models
     axis_id = num_models + 1
@@ -378,8 +379,7 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
         )
         # "grid_color_scale_centered_xaxis_hotkeys.tcl"
         if not os.path.exists(vmd_loader):
-            print(f"[flipbook] ERROR: VMD loader script not found at: {vmd_loader}")
-            sys.exit(1)
+            raise FileNotFoundError(f"VMD loader script not found at: {vmd_loader}")
 
         try:
             vmd_exec = find_vmd_executable()
@@ -395,33 +395,37 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
 
             print(f"[flipbook] Launching VMD in PTY:\n  {' '.join(cmd)}")
 
-            # 2. Create the pseudo-terminal
-            master_fd, slave_fd = pty.openpty()
+            if pty is None:
+                # Windows (and some restricted environments) do not support PTYs.
+                # Fall back to a detached process without attaching to a pseudo-terminal.
+                subprocess.Popen(cmd, start_new_session=True)
+            else:
+                # 2. Create the pseudo-terminal
+                master_fd, slave_fd = pty.openpty()
 
-            # 3. Launch VMD, attaching it to the PTY
-            process = subprocess.Popen(
-                cmd,
-                stdin=slave_fd,
-                stdout=slave_fd,
-                stderr=slave_fd,
-                start_new_session=True,
-                close_fds=True
-            )
+                # 3. Launch VMD, attaching it to the PTY
+                process = subprocess.Popen(
+                    cmd,
+                    stdin=slave_fd,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    start_new_session=True,
+                    close_fds=True
+                )
 
-            # 4. Close the slave end, VMD's process now owns it
-            os.close(slave_fd)
+                # 4. Close the slave end, VMD's process now owns it
+                os.close(slave_fd)
 
-            # 5. Start the background thread to read from our end
-            reader_thread = threading.Thread(
-                target=pty_reader,
-                args=(master_fd,),
-                daemon=True # Ensures thread exits when main script exits
-            )
-            reader_thread.start()
+                # 5. Start the background thread to read from our end
+                reader_thread = threading.Thread(
+                    target=pty_reader,
+                    args=(master_fd,),
+                    daemon=True  # Ensures thread exits when main script exits
+                )
+                reader_thread.start()
 
         except Exception as e:
-            print(f"[flipbook] VMD PTY launch failed: {e}")
-            sys.exit(1)
+            raise RuntimeError(f"VMD launch failed: {e}") from e
 
         return  # Prevent ChimeraX execution path
 
@@ -436,8 +440,7 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
     try:
         chx_exec = _which_chimerax()
     except FileNotFoundError as e:
-        print(str(e))
-        sys.exit(1)
+        raise
 
     cmd = [chx_exec, '--cmd', chimera_commands]
     print(f"[flipbook] Launching: {cmd[0]}")
@@ -446,14 +449,11 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
         # Use Popen to unblock the notebook, just like we do for VMD
         subprocess.Popen(cmd, start_new_session=True)
     except FileNotFoundError:
-        print("Error: ChimeraX executable not found or not executable.")
-        sys.exit(1)
+        raise FileNotFoundError("ChimeraX executable not found or not executable.")
     except subprocess.CalledProcessError as e:
-        print(f"ChimeraX exited with an error: {e}")
-        sys.exit(e.returncode)
+        raise RuntimeError(f"ChimeraX exited with an error: {e}") from e
     except Exception as e:
-        print(f"An unexpected error occurred while running ChimeraX: {e}")
-        sys.exit(1)
+        raise RuntimeError(f"An unexpected error occurred while running ChimeraX: {e}") from e
 
 
 # -------------------------------------------------------------------------
@@ -474,14 +474,18 @@ def main():
                         help='Extra ChimeraX commands to run after the default commands.')
     args = parser.parse_args()
 
-    run_flipbook(
-        directory=args.directory,
-        palette=args.palette,
-        min_bfactor=args.min_bfactor,
-        max_bfactor=args.max_bfactor,
-        extra_commands=args.extra_commands,
-        viewer=args.viewer
-    )
+    try:
+        run_flipbook(
+            directory=args.directory,
+            palette=args.palette,
+            min_bfactor=args.min_bfactor,
+            max_bfactor=args.max_bfactor,
+            extra_commands=args.extra_commands,
+            viewer=args.viewer
+        )
+    except Exception as e:
+        print(f"[flipbook] ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':

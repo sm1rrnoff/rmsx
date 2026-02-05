@@ -1,15 +1,7 @@
-# rmsx/__init__.py
+from __future__ import annotations
 
-from .core import (
-    run_rmsx,
-    combine_pdb_files,
-    all_chain_rmsx,
-    run_rmsx_flipbook,
-    run_shift_map,
-    all_chain_shift_map,
-    run_shift_flipbook,
-)
-from .flipbook import run_flipbook  # if you still want this convenience import
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "run_rmsx",
@@ -22,3 +14,27 @@ __all__ = [
     "run_shift_flipbook",
 ]
 
+_CORE_EXPORTS = {
+    "run_rmsx",
+    "combine_pdb_files",
+    "all_chain_rmsx",
+    "run_rmsx_flipbook",
+    "run_shift_map",
+    "all_chain_shift_map",
+    "run_shift_flipbook",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _CORE_EXPORTS:
+        core = import_module(".core", __name__)
+        return getattr(core, name)
+    if name == "run_flipbook":
+        flipbook = import_module(".flipbook", __name__)
+        return getattr(flipbook, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    # Avoid importing heavy dependencies during introspection/test discovery.
+    return sorted(set(globals().keys()))
