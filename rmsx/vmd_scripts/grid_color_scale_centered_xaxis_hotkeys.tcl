@@ -62,6 +62,10 @@ set ::SPLINE     0
 set ::USERSCALE  1.0        ;# multiply 0..10 values
 set ::USEROFFSET 0.0        ;# add offset before clamp
 
+# Thickness source for modulation (can toggle at runtime)
+set ::THICKFIELD "user2"     ;# user2 | beta | user
+set ::THICKFIELDS [list user2 beta user]
+
 # Color pipeline (independent of thickness):
 # We'll color by 'user' (can switch to Beta via hotkey if desired)
 set ::COLORMETHOD "User"    ;# "User" | "Beta" | "User2" | etc.
@@ -84,6 +88,24 @@ proc applyColor {} {
         mol scaleminmax $molid 0 $::COLMIN $::COLMAX
     }
     puts [format {Color -> %s  range=[%0.2f..%0.2f]} $::COLORMETHOD $::COLMIN $::COLMAX]
+}
+
+# Helper: set thickness modulation source
+proc setThicknessField {field} {
+    set ::THICKFIELD $field
+    set env(VMDMODULATERIBBON) $field
+    set env(VMDMODULATENEWTUBE) $field
+    set env(VMDMODULATENEWCARTOON) $field
+    puts [format {Thickness source -> %s} $field]
+    applyGeom
+}
+
+# Helper: cycle thickness modulation source
+proc toggleThicknessField {} {
+    set idx [lsearch -exact $::THICKFIELDS $::THICKFIELD]
+    if {$idx < 0} { set idx 0 }
+    set next [expr {($idx + 1) % [llength $::THICKFIELDS]}]
+    setThicknessField [lindex $::THICKFIELDS $next]
 }
 
 # --- NEW PROCEDURE ---
@@ -206,14 +228,6 @@ set maxNorm [lindex [lsort -real $normValues] end]
 puts [format {Color/scale normalized range (raw): %0.2f – %0.2f} $minNorm $maxNorm]
 
 # ----------------------------------------------------------------------
-# Choose per-atom fields:
-#  - 'user'  -> color (independent)
-#  - 'user2' -> thickness (independent)
-# Also set env knobs so reps read thickness from user2 where supported.
-set env(VMDMODULATERIBBON) user2
-set env(VMDMODULATENEWTUBE) user2
-set env(VMDMODULATENEWCARTOON) user2
-
 # Assign fields
 for {set i 0} {$i<[llength $resIndexMap]} {incr i} {
     lassign [lindex $resIndexMap $i] molid resid
@@ -243,7 +257,7 @@ foreach molid $molList {
     mol modmaterial 0 $molid AOChalky
 
 }
-applyGeom
+setThicknessField $::THICKFIELD
 applyColor
 
 # ----------------------------------------------------------------------
@@ -331,6 +345,7 @@ user add key {9} { set ::USERSCALE [expr {$::USERSCALE * 0.9}] ; puts [format {U
 user add key {0} { set ::USERSCALE [expr {$::USERSCALE * 1.1}] ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
 user add key {_} { set ::USEROFFSET [expr {$::USEROFFSET - 0.2}] ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
 user add key {;} { set ::USEROFFSET [expr {$::USEROFFSET + 0.2}] ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
+user add key {t} { toggleThicknessField }
 
 # Color range (color only): ,  .
 user add key {,} { set ::COLMIN [expr {$::COLMIN + 0.5}] ; applyColor }
@@ -343,7 +358,6 @@ user add key {c} {
     puts [format {Coloring by %s} $::COLORMETHOD]
 }
 
-puts {✅ Style hotkeys loaded:  [ and ] = base thickness (geom),  9/0/_/; = size scale/offset (geom),  ,/. = color range,  c = toggle User/Beta color}
+puts {✅ Style hotkeys loaded:  [ and ] = base thickness (geom),  9/0/_/; = size scale/offset (geom),  t = toggle thickness source,  ,/. = color range,  c = toggle User/Beta color}
 # ----------------------------------------------------------------------
-
 
