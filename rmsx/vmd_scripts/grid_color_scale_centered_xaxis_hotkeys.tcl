@@ -58,19 +58,13 @@ set ::ASPECT     1.00
 set ::SPLINE     0
 
 # Thickness modulation pipeline (independent of color):
-# We'll store per-residue thickness driver into 'user2' (for storage/custom scaling),
-# but mirror into 'user' for NewTube thickness (most compatible).
-set ::USERSCALE  1.00       ;# multiply 0..1 values (use 0/9 to tune)
+# We'll store per-residue thickness driver into 'user2'
+set ::USERSCALE  1.0        ;# multiply 0..10 values
 set ::USEROFFSET 0.0        ;# add offset before clamp
 
-# Thickness source for modulation (can toggle at runtime)
-# NOTE: NewTube thickness is most reliable with 'user'
-set ::THICKFIELD "user"     ;# user | beta
-set ::THICKFIELDS [list user beta]
-
 # Color pipeline (independent of thickness):
-# We'll color by 'user2' (can switch to Beta via hotkey if desired)
-set ::COLORMETHOD "User2"    ;# "User" | "User2" | "Beta" | etc.
+# We'll color by 'user' (can switch to Beta via hotkey if desired)
+set ::COLORMETHOD "User"    ;# "User" | "Beta" | "User2" | etc.
 set ::COLMIN       0.0
 set ::COLMAX      10.0
 
@@ -90,24 +84,6 @@ proc applyColor {} {
         mol scaleminmax $molid 0 $::COLMIN $::COLMAX
     }
     puts [format {Color -> %s  range=[%0.2f..%0.2f]} $::COLORMETHOD $::COLMIN $::COLMAX]
-}
-
-# Helper: set thickness modulation source
-proc setThicknessField {field} {
-    set ::THICKFIELD $field
-    set env(VMDMODULATERIBBON) $field
-    set env(VMDMODULATENEWTUBE) $field
-    set env(VMDMODULATENEWCARTOON) $field
-    puts [format {Thickness source -> %s} $field]
-    applyGeom
-}
-
-# Helper: cycle thickness modulation source
-proc toggleThicknessField {} {
-    set idx [lsearch -exact $::THICKFIELDS $::THICKFIELD]
-    if {$idx < 0} { set idx 0 }
-    set next [expr {($idx + 1) % [llength $::THICKFIELDS]}]
-    setThicknessField [lindex $::THICKFIELDS $next]
 }
 
 # --- NEW PROCEDURE ---
@@ -229,43 +205,34 @@ set minNorm [lindex [lsort -real $normValues] 0]
 set maxNorm [lindex [lsort -real $normValues] end]
 puts [format {Color/scale normalized range (raw): %0.2f – %0.2f} $minNorm $maxNorm]
 
-# Store for later re-application
-set ::NORMVALUES $normValues
-set ::RESINDEXMAP $resIndexMap
-
-# Apply thickness values by mirroring user2 -> user (0..1 range)
-proc applyThicknessFromUser2 {} {
-    foreach molid $::molList {
-        set sel [atomselect $molid "all"]
-        set u2 [$sel get user2]
-        set out {}
-        foreach v $u2 {
-            set t [expr {($v / 10.0) * $::USERSCALE + $::USEROFFSET}]
-            if {$t < 0.0}  { set t 0.0 }
-            lappend out $t
-        }
-        $sel set user $out
-        $sel delete
-    }
-}
-
 # ----------------------------------------------------------------------
+# Choose per-atom fields:
+#  - 'user'  -> color (independent)
+#  - 'user2' -> thickness (independent)
+# Also set env knobs so reps read thickness from user2 where supported.
+set env(VMDMODULATERIBBON) user2
+set env(VMDMODULATENEWTUBE) user2
+set env(VMDMODULATENEWCARTOON) user2
+
 # Assign fields
 for {set i 0} {$i<[llength $resIndexMap]} {incr i} {
     lassign [lindex $resIndexMap $i] molid resid
     set vraw [lindex $normValues $i]          ;# 0..10
 
-    # color driver -> user2 (independent)
+    # thickness driver -> user2 (scaled independently)
+    set t [expr {$::USERSCALE*$vraw + $::USEROFFSET}]
+    if {$t < 0.0}  { set t 0.0 }
+    if {$t > 10.0} { set t 10.0 }
+
+    # color driver -> user (independent)
     set c $vraw
 
     set sel [atomselect $molid "resid $resid"]
     set n [$sel num]
-    $sel set user2  [lrepeat $n $c]
+    $sel set user  [lrepeat $n $c]
+    $sel set user2 [lrepeat $n $t]
     $sel delete
 }
-
-# Apply thickness values after assigning color
-applyThicknessFromUser2
 
 # ----------------------------------------------------------------------
 # Apply representation + color mapping (decoupled)
@@ -276,7 +243,7 @@ foreach molid $molList {
     mol modmaterial 0 $molid AOChalky
 
 }
-setThicknessField $::THICKFIELD
+applyGeom
 applyColor
 
 # ----------------------------------------------------------------------
@@ -303,7 +270,7 @@ stage location Off
 color Display Background white
 rotate x by 90
 
-puts "✅ Molecules arranged along X axis, centered at origin, colored by 'user2', and SIZE-modulated by 'user' (mirrored from user2; 9/0 scales thickness)."
+puts "✅ Molecules arranged along X axis, centered at origin, colored by 'user', and SIZE-modulated by 'user2' (decoupled)."
 
 # ===============================================================
 # rotateAllMols_3Dkeys.tcl
@@ -359,23 +326,24 @@ puts "✅ Grid spacing hotkeys loaded:  +/= increase,  - decrease"
 user add key {[} { set ::THICK  [expr {$::THICK + 0.05}] ; applyGeom }
 user add key {]} { set ::THICK  [expr {max(0.05, $::THICK - 0.05)}] ; applyGeom }
 
-# Optional: thickness modulation amplitude/offset (user via user2) — geometry only
-user add key {9} { set ::USERSCALE [expr {$::USERSCALE * 0.9}] ; applyThicknessFromUser2 ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
-user add key {0} { set ::USERSCALE [expr {$::USERSCALE * 1.1}] ; applyThicknessFromUser2 ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
-user add key {_} { set ::USEROFFSET [expr {$::USEROFFSET - 0.2}] ; applyThicknessFromUser2 ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
-user add key {;} { set ::USEROFFSET [expr {$::USEROFFSET + 0.2}] ; applyThicknessFromUser2 ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
-user add key {t} { toggleThicknessField }
+# Optional: thickness modulation amplitude/offset (user2) — geometry only
+user add key {9} { set ::USERSCALE [expr {$::USERSCALE * 0.9}] ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
+user add key {0} { set ::USERSCALE [expr {$::USERSCALE * 1.1}] ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
+user add key {_} { set ::USEROFFSET [expr {$::USEROFFSET - 0.2}] ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
+user add key {;} { set ::USEROFFSET [expr {$::USEROFFSET + 0.2}] ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
 
 # Color range (color only): ,  .
 user add key {,} { set ::COLMIN [expr {$::COLMIN + 0.5}] ; applyColor }
 user add key {.} { set ::COLMAX [expr {$::COLMAX + 0.5}] ; applyColor }
 
-# Toggle color method between User2 and Beta (color only)
+# Toggle color method between User and Beta (color only)
 user add key {c} {
-    if {$::COLORMETHOD eq "User2"} { set ::COLORMETHOD "Beta" } else { set ::COLORMETHOD "User2" }
+    if {$::COLORMETHOD eq "User"} { set ::COLORMETHOD "Beta" } else { set ::COLORMETHOD "User" }
     applyColor
     puts [format {Coloring by %s} $::COLORMETHOD]
 }
 
-puts {✅ Style hotkeys loaded:  [ and ] = base thickness (geom),  9/0/_/; = size scale/offset (geom),  t = toggle thickness source,  ,/. = color range,  c = toggle User2/Beta color}
+puts {✅ Style hotkeys loaded:  [ and ] = base thickness (geom),  9/0/_/; = size scale/offset (geom),  ,/. = color range,  c = toggle User/Beta color}
 # ----------------------------------------------------------------------
+
+
