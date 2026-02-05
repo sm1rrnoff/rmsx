@@ -10,8 +10,14 @@
 # Set the path to your *main* script.
 # IMPORTANT: Resolve relative to *this* loader script so it works from any CWD
 # (e.g., when launched from Jupyter notebooks).
-set script_dir [file dirname [info script]]
-set main_script_path [file join $script_dir "grid_color_scale_centered_xaxis_hotkeys.tcl"]
+# You can override with environment variable RMSX_VMD_MAIN.
+set script_path [file normalize [info script]]
+set script_dir [file dirname $script_path]
+if {[info exists env(RMSX_VMD_MAIN)] && $env(RMSX_VMD_MAIN) ne ""} {
+    set main_script_path $env(RMSX_VMD_MAIN)
+} else {
+    set main_script_path [file join $script_dir "grid_color_scale_centered_xaxis_hotkeys.tcl"]
+}
 # --- END CONFIGURATION ---
 
 

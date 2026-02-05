@@ -395,10 +395,11 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
 
             print(f"[flipbook] Launching VMD in PTY:\n  {' '.join(cmd)}")
 
+            vmd_cwd = os.path.dirname(vmd_loader)
             if pty is None:
                 # Windows (and some restricted environments) do not support PTYs.
                 # Fall back to a detached process without attaching to a pseudo-terminal.
-                subprocess.Popen(cmd, start_new_session=True)
+                subprocess.Popen(cmd, start_new_session=True, cwd=vmd_cwd)
             else:
                 # 2. Create the pseudo-terminal
                 master_fd, slave_fd = pty.openpty()
@@ -410,7 +411,8 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
                     stdout=slave_fd,
                     stderr=slave_fd,
                     start_new_session=True,
-                    close_fds=True
+                    close_fds=True,
+                    cwd=vmd_cwd
                 )
 
                 # 4. Close the slave end, VMD's process now owns it
