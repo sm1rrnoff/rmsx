@@ -1401,6 +1401,31 @@ def run_rmsx(
 
     u_top = mda.Universe(topology_file)
     chain_ids = np.unique(u_top.atoms.segids)
+
+    # Filter out chains/segids that don't have CA atoms for the requested selection
+    valid_chain_ids = []
+    for chain in chain_ids:
+        selection_str = get_selection_string(
+            analysis_type=analysis_type,
+            chain_sele=chain,
+            full_backbone=full_backbone
+        )
+        atoms_full = u_top.select_atoms(selection_str)
+        atoms_ca = atoms_full.select_atoms("name CA")
+        if len(atoms_ca) == 0:
+            if verbose:
+                print(
+                    f"Skipping chain '{chain}': no CA atoms for selection '{selection_str}'."
+                )
+            continue
+        valid_chain_ids.append(chain)
+
+    if not valid_chain_ids:
+        raise ValueError(
+            "No chains with CA atoms were found for the requested selection. "
+            "If your topology uses different segids or is non-protein, "
+            "specify a valid protein chain or adjust analysis_type/full_backbone."
+        )
     chain_info = {}
     for chain in chain_ids:
         chain_atoms = u_top.select_atoms(f'segid {chain}')
@@ -1613,10 +1638,35 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
     u_top = mda.Universe(topology_file)
     chain_ids = np.unique(u_top.atoms.segids)
 
+    # Filter out chains/segids that don't have CA atoms for the requested selection
+    valid_chain_ids = []
+    for chain in chain_ids:
+        selection_str = get_selection_string(
+            analysis_type=analysis_type,
+            chain_sele=chain,
+            full_backbone=full_backbone
+        )
+        atoms_full = u_top.select_atoms(selection_str)
+        atoms_ca = atoms_full.select_atoms("name CA")
+        if len(atoms_ca) == 0:
+            if verbose:
+                print(
+                    f"Skipping chain '{chain}': no CA atoms for selection '{selection_str}'."
+                )
+            continue
+        valid_chain_ids.append(chain)
+
+    if not valid_chain_ids:
+        raise ValueError(
+            "No chains with CA atoms were found for the requested selection. "
+            "If your topology uses different segids or is non-protein, "
+            "specify a valid protein chain or adjust analysis_type/full_backbone."
+        )
+
     combined_output_dirs = []
     csv_paths = []
 
-    for chain in chain_ids:
+    for chain in valid_chain_ids:
         if verbose:
             print(f"\nAnalyzing Chain {chain}...")
 
@@ -2368,10 +2418,35 @@ def all_chain_shift_map(
     u_top = mda.Universe(topology_file)
     chain_ids = np.unique(u_top.atoms.segids)
 
+    # Filter out chains/segids that don't have CA atoms for the requested selection
+    valid_chain_ids = []
+    for chain in chain_ids:
+        selection_str = get_selection_string(
+            analysis_type=analysis_type,
+            chain_sele=chain,
+            full_backbone=full_backbone
+        )
+        atoms_full = u_top.select_atoms(selection_str)
+        atoms_ca = atoms_full.select_atoms("name CA")
+        if len(atoms_ca) == 0:
+            if verbose:
+                print(
+                    f"Skipping chain '{chain}': no CA atoms for selection '{selection_str}'."
+                )
+            continue
+        valid_chain_ids.append(chain)
+
+    if not valid_chain_ids:
+        raise ValueError(
+            "No chains with CA atoms were found for the requested selection. "
+            "If your topology uses different segids or is non-protein, "
+            "specify a valid protein chain or adjust analysis_type/full_backbone."
+        )
+
     combined_output_dirs = []
     csv_paths = []
 
-    for chain in chain_ids:
+    for chain in valid_chain_ids:
         if verbose:
             print(f"\nAnalyzing Chain {chain}...")
 
@@ -2407,7 +2482,7 @@ def all_chain_shift_map(
         if possible_csv:
             csv_paths.append(str(possible_csv[0]))
 
-    if len(chain_ids) > 1:
+    if len(valid_chain_ids) > 1:
         combined_dir = os.path.join(output_dir, "combined")
         if verbose:
             print("\nCombining PDB files from all chains...")
@@ -2415,7 +2490,7 @@ def all_chain_shift_map(
         if verbose:
             print("Combined shift map analysis completed for all chains.")
     else:
-        single_chain_id = chain_ids[0]
+        single_chain_id = valid_chain_ids[0]
         combined_dir = os.path.join(output_dir, f"chain_{single_chain_id}_shiftmap")
         if verbose:
             print(f"Single-chain analysis completed. Using directory: {combined_dir}")
