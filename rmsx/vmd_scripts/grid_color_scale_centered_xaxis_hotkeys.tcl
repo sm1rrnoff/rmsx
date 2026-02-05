@@ -58,13 +58,15 @@ set ::ASPECT     1.00
 set ::SPLINE     0
 
 # Thickness modulation pipeline (independent of color):
-# We'll store per-residue thickness driver into 'user' (most compatible)
-set ::USERSCALE  1.0        ;# multiply 0..1 values
+# We'll store per-residue thickness driver into 'user2' (for storage/custom scaling),
+# but mirror into 'user' for NewTube thickness (most compatible).
+set ::USERSCALE  1.00       ;# multiply 0..1 values (use 0/9 to tune)
 set ::USEROFFSET 0.0        ;# add offset before clamp
 
 # Thickness source for modulation (can toggle at runtime)
-set ::THICKFIELD "user"     ;# user | user2 | beta
-set ::THICKFIELDS [list user user2 beta]
+# NOTE: NewTube thickness is most reliable with 'user'
+set ::THICKFIELD "user"     ;# user | beta
+set ::THICKFIELDS [list user beta]
 
 # Color pipeline (independent of thickness):
 # We'll color by 'user2' (can switch to Beta via hotkey if desired)
@@ -231,20 +233,19 @@ puts [format {Color/scale normalized range (raw): %0.2f – %0.2f} $minNorm $max
 set ::NORMVALUES $normValues
 set ::RESINDEXMAP $resIndexMap
 
-# Apply thickness values (user2) using 0..1 range
-proc applyThicknessValues {} {
-    set idx 0
-    foreach item $::RESINDEXMAP {
-        lassign $item molid resid
-        set vraw [lindex $::NORMVALUES $idx]          ;# 0..10
-        set t [expr {($vraw / 10.0) * $::USERSCALE + $::USEROFFSET}]
-        if {$t < 0.0}  { set t 0.0 }
-        if {$t > 1.0}  { set t 1.0 }
-        set sel [atomselect $molid "resid $resid"]
-        set n [$sel num]
-        $sel set user [lrepeat $n $t]
+# Apply thickness values by mirroring user2 -> user (0..1 range)
+proc applyThicknessFromUser2 {} {
+    foreach molid $::molList {
+        set sel [atomselect $molid "all"]
+        set u2 [$sel get user2]
+        set out {}
+        foreach v $u2 {
+            set t [expr {($v / 10.0) * $::USERSCALE + $::USEROFFSET}]
+            if {$t < 0.0}  { set t 0.0 }
+            lappend out $t
+        }
+        $sel set user $out
         $sel delete
-        incr idx
     }
 }
 
@@ -264,7 +265,7 @@ for {set i 0} {$i<[llength $resIndexMap]} {incr i} {
 }
 
 # Apply thickness values after assigning color
-applyThicknessValues
+applyThicknessFromUser2
 
 # ----------------------------------------------------------------------
 # Apply representation + color mapping (decoupled)
@@ -302,7 +303,7 @@ stage location Off
 color Display Background white
 rotate x by 90
 
-puts "✅ Molecules arranged along X axis, centered at origin, colored by 'user2', and SIZE-modulated by 'user' (decoupled)."
+puts "✅ Molecules arranged along X axis, centered at origin, colored by 'user2', and SIZE-modulated by 'user' (mirrored from user2; 9/0 scales thickness)."
 
 # ===============================================================
 # rotateAllMols_3Dkeys.tcl
@@ -358,11 +359,11 @@ puts "✅ Grid spacing hotkeys loaded:  +/= increase,  - decrease"
 user add key {[} { set ::THICK  [expr {$::THICK + 0.05}] ; applyGeom }
 user add key {]} { set ::THICK  [expr {max(0.05, $::THICK - 0.05)}] ; applyGeom }
 
-# Optional: thickness modulation amplitude/offset (user) — geometry only
-user add key {9} { set ::USERSCALE [expr {$::USERSCALE * 0.9}] ; applyThicknessValues ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
-user add key {0} { set ::USERSCALE [expr {$::USERSCALE * 1.1}] ; applyThicknessValues ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
-user add key {_} { set ::USEROFFSET [expr {$::USEROFFSET - 0.2}] ; applyThicknessValues ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
-user add key {;} { set ::USEROFFSET [expr {$::USEROFFSET + 0.2}] ; applyThicknessValues ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
+# Optional: thickness modulation amplitude/offset (user via user2) — geometry only
+user add key {9} { set ::USERSCALE [expr {$::USERSCALE * 0.9}] ; applyThicknessFromUser2 ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
+user add key {0} { set ::USERSCALE [expr {$::USERSCALE * 1.1}] ; applyThicknessFromUser2 ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
+user add key {_} { set ::USEROFFSET [expr {$::USEROFFSET - 0.2}] ; applyThicknessFromUser2 ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
+user add key {;} { set ::USEROFFSET [expr {$::USEROFFSET + 0.2}] ; applyThicknessFromUser2 ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
 user add key {t} { toggleThicknessField }
 
 # Color range (color only): ,  .
