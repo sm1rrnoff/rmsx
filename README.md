@@ -1,4 +1,5 @@
-# RMSDxRMSF = RMSX
+# RMSX and Flipbook: Simple-to-use, high-resolution mapping of molecular motions over time
+
 RMSX combines the features of RMSD and RMSF into a simple-to-understand and simple-to-implement tool for understanding how proteins move. It can work with simulation files from across MD simulation suites (e.g., GROMACS and NAMD, Amber etc.) and is much faster than other visualization methods while delivering publication-ready images out of the box. 
 
 
@@ -9,9 +10,11 @@ RMSX combines the features of RMSD and RMSF into a simple-to-understand and simp
 - [**Python**](https://www.python.org/) If not already installed (tested with 3.8+)
 - [**Jupyter Notebooks**](https://phoenixnap.com/kb/install-jupyter-notebook#:~:text=Install%20Jupyter%20Notebook%20on%20Linux,via%20pip) (Recommended) 
 - [**R**](https://cran.r-project.org/) installed and in your PATH (the `Rscript` command must be available).
-- [**ChimeraX**](https://www.cgl.ucsf.edu/chimerax/download.html) if you plan to use the **Flipbook** 3D visualization.
+- [**ChimeraX**](https://www.cgl.ucsf.edu/chimerax/download.html) Simplest option if you plan to use the **Flipbook** 3D visualization.
+- _or:_
+- [**VMD**](https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=VMD) Advanced **Flipbook** option for photorealistic rendering, depth cueing, occlusion, and ray tracing. 
 - The RMSX code will attempt to install R packages like `ggplot2`, `viridis`, `dplyr`, etc., if they’re missing.
-  
+
 
 ### 2. Installation
 
@@ -144,6 +147,11 @@ run_rmsx_flipbook(
 
 
 ![Protease RMSX and Flipbook Example](protease_rmsx_flipbook_overview.png)
+
+
+
+
+
 
 
 
