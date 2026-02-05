@@ -44,12 +44,17 @@ set additional_delay_ms 1500
 # Set the modulation environment variable IMMEDIATELY.
 # This must be done *before* VMD becomes idle, or it will be ignored.
 # RMSX's main script uses:
-#  - 'user'  for color
-#  - 'user2' for thickness modulation
-set env(VMDMODULATERIBBON) user2
-set env(VMDMODULATENEWTUBE) user2
-set env(VMDMODULATENEWCARTOON) user2
-puts "--- Set env(VMDMODULATE*) to 'user2' (during init) ---"
+#  - 'user'  for thickness modulation (most compatible)
+#  - 'user2' for color
+# You can override with RMSX_VMD_THICKFIELD (user|user2|beta)
+set thick_field "user"
+if {[info exists env(RMSX_VMD_THICKFIELD)] && $env(RMSX_VMD_THICKFIELD) ne ""} {
+    set thick_field $env(RMSX_VMD_THICKFIELD)
+}
+set env(VMDMODULATERIBBON) $thick_field
+set env(VMDMODULATENEWTUBE) $thick_field
+set env(VMDMODULATENEWCARTOON) $thick_field
+puts [format {--- Set env(VMDMODULATE*) to '%s' (during init) ---} $thick_field]
 # --- END FIX ---
 
 # This procedure will run after the delay
