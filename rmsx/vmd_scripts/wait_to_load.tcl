@@ -18,6 +18,11 @@ if {[info exists env(RMSX_VMD_MAIN)] && $env(RMSX_VMD_MAIN) ne ""} {
 } else {
     set main_script_path [file join $script_dir "grid_color_scale_centered_xaxis_hotkeys.tcl"]
 }
+# If a relative path was supplied, resolve it against this script directory
+if {[file pathtype $main_script_path] eq "relative"} {
+    set main_script_path [file join $script_dir $main_script_path]
+}
+set main_script_path [file normalize $main_script_path]
 # --- END CONFIGURATION ---
 
 

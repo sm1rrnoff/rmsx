@@ -396,10 +396,13 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
             print(f"[flipbook] Launching VMD in PTY:\n  {' '.join(cmd)}")
 
             vmd_cwd = os.path.dirname(vmd_loader)
+            vmd_main = os.path.join(vmd_cwd, "grid_color_scale_centered_xaxis_hotkeys.tcl")
+            vmd_env = os.environ.copy()
+            vmd_env["RMSX_VMD_MAIN"] = vmd_main
             if pty is None:
                 # Windows (and some restricted environments) do not support PTYs.
                 # Fall back to a detached process without attaching to a pseudo-terminal.
-                subprocess.Popen(cmd, start_new_session=True, cwd=vmd_cwd)
+                subprocess.Popen(cmd, start_new_session=True, cwd=vmd_cwd, env=vmd_env)
             else:
                 # 2. Create the pseudo-terminal
                 master_fd, slave_fd = pty.openpty()
@@ -412,7 +415,8 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
                     stderr=slave_fd,
                     start_new_session=True,
                     close_fds=True,
-                    cwd=vmd_cwd
+                    cwd=vmd_cwd,
+                    env=vmd_env
                 )
 
                 # 4. Close the slave end, VMD's process now owns it
