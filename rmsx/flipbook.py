@@ -399,7 +399,7 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
             vmd_main = os.path.join(vmd_cwd, "grid_color_scale_centered_xaxis_hotkeys.tcl")
             vmd_env = os.environ.copy()
             vmd_env["RMSX_VMD_MAIN"] = vmd_main
-            vmd_env.setdefault("RMSX_VMD_THICKFIELD", "user2")
+            vmd_env.setdefault("RMSX_VMD_THICKFIELD", "user")
             if pty is None:
                 # Windows (and some restricted environments) do not support PTYs.
                 # Fall back to a detached process without attaching to a pseudo-terminal.

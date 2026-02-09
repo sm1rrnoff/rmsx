@@ -63,8 +63,8 @@ set ::USERSCALE  1.0        ;# multiply 0..10 values
 set ::USEROFFSET 0.0        ;# add offset before clamp
 
 # Color pipeline (independent of thickness):
-# We'll color by 'user' (can switch to Beta via hotkey if desired)
-set ::COLORMETHOD "User"    ;# "User" | "Beta" | "User2" | etc.
+# We'll color by 'user2' (can switch to Beta via hotkey if desired)
+set ::COLORMETHOD "User2"    ;# "User2" | "Beta" | "User" | etc.
 set ::COLMIN       0.0
 set ::COLMAX      10.0
 
@@ -207,30 +207,30 @@ puts [format {Color/scale normalized range (raw): %0.2f – %0.2f} $minNorm $max
 
 # ----------------------------------------------------------------------
 # Choose per-atom fields:
-#  - 'user'  -> color (independent)
-#  - 'user2' -> thickness (independent)
-# Also set env knobs so reps read thickness from user2 where supported.
-set env(VMDMODULATERIBBON) user2
-set env(VMDMODULATENEWTUBE) user2
-set env(VMDMODULATENEWCARTOON) user2
+#  - 'user'  -> thickness (independent)
+#  - 'user2' -> color (independent)
+# Also set env knobs so reps read thickness from user where supported.
+set env(VMDMODULATERIBBON) user
+set env(VMDMODULATENEWTUBE) user
+set env(VMDMODULATENEWCARTOON) user
 
 # Assign fields
 for {set i 0} {$i<[llength $resIndexMap]} {incr i} {
     lassign [lindex $resIndexMap $i] molid resid
     set vraw [lindex $normValues $i]          ;# 0..10
 
-    # thickness driver -> user2 (scaled independently)
+    # thickness driver -> user (scaled independently)
     set t [expr {$::USERSCALE*$vraw + $::USEROFFSET}]
     if {$t < 0.0}  { set t 0.0 }
     if {$t > 10.0} { set t 10.0 }
 
-    # color driver -> user (independent)
+    # color driver -> user2 (independent)
     set c $vraw
 
     set sel [atomselect $molid "resid $resid"]
     set n [$sel num]
-    $sel set user  [lrepeat $n $c]
-    $sel set user2 [lrepeat $n $t]
+    $sel set user  [lrepeat $n $t]
+    $sel set user2 [lrepeat $n $c]
     $sel delete
 }
 
@@ -270,7 +270,7 @@ stage location Off
 color Display Background white
 rotate x by 90
 
-puts "✅ Molecules arranged along X axis, centered at origin, colored by 'user', and SIZE-modulated by 'user2' (decoupled)."
+puts "✅ Molecules arranged along X axis, centered at origin, colored by 'user2', and SIZE-modulated by 'user'."
 
 # ===============================================================
 # rotateAllMols_3Dkeys.tcl
@@ -326,7 +326,7 @@ puts "✅ Grid spacing hotkeys loaded:  +/= increase,  - decrease"
 user add key {[} { set ::THICK  [expr {$::THICK + 0.05}] ; applyGeom }
 user add key {]} { set ::THICK  [expr {max(0.05, $::THICK - 0.05)}] ; applyGeom }
 
-# Optional: thickness modulation amplitude/offset (user2) — geometry only
+# Optional: thickness modulation amplitude/offset (user) — geometry only
 user add key {9} { set ::USERSCALE [expr {$::USERSCALE * 0.9}] ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
 user add key {0} { set ::USERSCALE [expr {$::USERSCALE * 1.1}] ; puts [format {USERSCALE=%0.3f} $::USERSCALE] }
 user add key {_} { set ::USEROFFSET [expr {$::USEROFFSET - 0.2}] ; puts [format {USEROFFSET=%0.3f} $::USEROFFSET] }
@@ -336,14 +336,12 @@ user add key {;} { set ::USEROFFSET [expr {$::USEROFFSET + 0.2}] ; puts [format 
 user add key {,} { set ::COLMIN [expr {$::COLMIN + 0.5}] ; applyColor }
 user add key {.} { set ::COLMAX [expr {$::COLMAX + 0.5}] ; applyColor }
 
-# Toggle color method between User and Beta (color only)
+# Toggle color method between User2 and Beta (color only)
 user add key {c} {
-    if {$::COLORMETHOD eq "User"} { set ::COLORMETHOD "Beta" } else { set ::COLORMETHOD "User" }
+    if {$::COLORMETHOD eq "User2"} { set ::COLORMETHOD "Beta" } else { set ::COLORMETHOD "User2" }
     applyColor
     puts [format {Coloring by %s} $::COLORMETHOD]
 }
 
-puts {✅ Style hotkeys loaded:  [ and ] = base thickness (geom),  9/0/_/; = size scale/offset (geom),  ,/. = color range,  c = toggle User/Beta color}
+puts {✅ Style hotkeys loaded:  [ and ] = base thickness (geom),  9/0/_/; = size scale/offset (geom),  ,/. = color range,  c = toggle User2/Beta color}
 # ----------------------------------------------------------------------
-
-
