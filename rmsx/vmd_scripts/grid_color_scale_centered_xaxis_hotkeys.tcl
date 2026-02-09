@@ -60,7 +60,7 @@ set ::SPLINE     0
 # Thickness modulation pipeline (independent of color):
 # We'll store per-residue thickness driver into 'user2'
 set ::USERSCALE  1.0        ;# multiply 0..10 values
-set ::USEROFFSET 0.0        ;# add offset before clamp
+set ::USEROFFSET 2.0        ;# add offset before clamp
 
 # Color pipeline (independent of thickness):
 # We'll color by 'user2' (can switch to Beta via hotkey if desired)
