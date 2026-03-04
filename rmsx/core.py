@@ -108,6 +108,26 @@ from pathlib import Path
 # If you have the flipbook module in the same directory structure, update import as needed
 from .flipbook import run_flipbook
 
+_CITATION_NOTICE_PRINTED = False
+_CITATION_NOTICE_ENV_DISABLE = {"1", "true", "yes", "y", "on"}
+_CITATION_NOTICE_TEXT = (
+    "Please cite RMSX + Flipbook:\n"
+    "Beruldsen, F., de Freitas, M.V. & Antunes, D.A. "
+    "High resolution mapping of protein motions in time and space with RMSX and Flipbook. "
+    "Sci Rep (2026). https://doi.org/10.1038/s41598-026-39869-7"
+)
+
+
+def maybe_print_citation_notice():
+    global _CITATION_NOTICE_PRINTED
+    if _CITATION_NOTICE_PRINTED:
+        return
+    if os.environ.get("RMSX_NO_CITATION", "").strip().lower() in _CITATION_NOTICE_ENV_DISABLE:
+        _CITATION_NOTICE_PRINTED = True
+        return
+    print(_CITATION_NOTICE_TEXT)
+    _CITATION_NOTICE_PRINTED = True
+
 
 # def get_selection_string(analysis_type="protein", chain_sele=None):
 #     """
@@ -1393,6 +1413,7 @@ def run_rmsx(
 
     (Other parameters remain as documented previously.)
     """
+    maybe_print_citation_notice()
     initialize_environment(verbose=verbose)
 
     if output_dir is None:
@@ -1595,6 +1616,7 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
     - custom_fill_label : str
          Optional custom label to override the default fill label in the plots.
     """
+    maybe_print_citation_notice()
     if output_dir is None:
         base_name = os.path.splitext(os.path.basename(topology_file))[0]
         output_dir = os.path.join(os.getcwd(), f"{base_name}_rmsx")
@@ -2219,6 +2241,7 @@ def run_shift_map(
         If True, use the stacked RMSD + per-slice mean + heatmap layout for the shift map.
 
     """
+    maybe_print_citation_notice()
     initialize_environment(verbose=verbose)
 
     # If output directory is not provided, create one based on the topology file name.
@@ -2375,6 +2398,7 @@ def all_chain_shift_map(
     - custom_fill_label : str
          Optional custom label to override the default fill label in the plots.
     """
+    maybe_print_citation_notice()
     if output_dir is None:
         base_name = os.path.splitext(os.path.basename(topology_file))[0]
         output_dir = os.path.join(os.getcwd(), f"{base_name}_shiftmap")

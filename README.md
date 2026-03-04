@@ -139,6 +139,32 @@ run_rmsx_flipbook(
 - **ChimeraX**: [Download here](https://www.cgl.ucsf.edu/chimerax/download.html) if you’d like to visualize the flipbook.
 - **Jupyter Notebook Behavior**: If you call `run_rmsx_flipbook` inside a Jupyter cell, ChimeraX runs interactively. The next cell won’t run until you **close** ChimeraX (or run it in detached mode). 
 
+### 7. Citation
+
+If you use RMSX + Flipbook in your work, please cite:
+
+> Beruldsen, F., de Freitas, M.V. & Antunes, D.A. High resolution mapping of protein motions in time and space with RMSX and Flipbook. *Scientific Reports* (2026). https://doi.org/10.1038/s41598-026-39869-7
+
+BibTeX:
+
+```bibtex
+@article{Beruldsen2026RMSXFlipbook,
+  author = {Beruldsen, F. and de Freitas, M. V. and Antunes, D. A.},
+  title = {High resolution mapping of protein motions in time and space with RMSX and Flipbook},
+  journal = {Scientific Reports},
+  year = {2026},
+  doi = {10.1038/s41598-026-39869-7},
+  url = {https://doi.org/10.1038/s41598-026-39869-7}
+}
+```
+
+RMSX now prints this citation reminder once per Python session when analysis functions are first run.  
+To suppress it in automated pipelines, set:
+
+```bash
+export RMSX_NO_CITATION=1
+```
+
 ---
 
 **That’s it!** For more examples and advanced usage check out the [**Quick Start Guide**](https://github.com/AntunesLab/rmsx/raw/main/RMSX_FlipBook_Quickstart.ipynb). If you need anything, open an [issue on GitHub](https://github.com/AntunesLab/rmsx/issues). 
