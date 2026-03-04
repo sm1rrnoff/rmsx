@@ -3,7 +3,12 @@
 RMSX combines the features of RMSD and RMSF into a simple-to-understand and simple-to-implement tool for understanding how proteins move. It can work with simulation files from across MD simulation suites (e.g., GROMACS and NAMD, Amber etc.) and is much faster than other visualization methods while delivering publication-ready images out of the box. 
 
 
-![Color options for RMSX and Flipbook](flipbook_and_rmsx_color_maps.png)
+![RMSX and Flipbook workflow overview](RMSX_Flipbook_how_to_linkedin.gif)
+
+### Video Walkthrough
+
+If you'd like a guided overview of the method, watch the tutorial here:  
+[RMSX + Flipbook Method Walkthrough](https://www.youtube.com/watch?v=UoN0GQKHCsw)
 
 ### 1. Prerequisites (click for install instructions) 
 - [**Git**](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git#:~:text=Installing%20on%20Windows&text=Just%20go%20to%20https%3A%2F%2F,to%20https%3A%2F%2Fgitforwindows.org.) Installed and added to your path (likely already done if you are using macOS or Linux)
@@ -169,8 +174,11 @@ export RMSX_NO_CITATION=1
 
 **That’s it!** For more examples and advanced usage check out the [**Quick Start Guide**](https://github.com/AntunesLab/rmsx/raw/main/RMSX_FlipBook_Quickstart.ipynb). If you need anything, open an [issue on GitHub](https://github.com/AntunesLab/rmsx/issues). 
 
+### Color Palette Options
 
+RMSX supports multiple perceptual palettes for heatmaps and flipbook coloring.
 
+![Color options for RMSX and Flipbook](flipbook_and_rmsx_color_maps.png)
 
 ![Protease RMSX and Flipbook Example](protease_rmsx_flipbook_overview.png)
 
