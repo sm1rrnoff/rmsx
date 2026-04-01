@@ -14,21 +14,21 @@ If you'd like a guided overview of the method, watch the tutorial here:
 - [**Git**](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git#:~:text=Installing%20on%20Windows&text=Just%20go%20to%20https%3A%2F%2F,to%20https%3A%2F%2Fgitforwindows.org.) Installed and added to your path (likely already done if you are using macOS or Linux)
 - [**Python**](https://www.python.org/) If not already installed (tested with 3.8+)
 - [**Jupyter Notebooks**](https://phoenixnap.com/kb/install-jupyter-notebook#:~:text=Install%20Jupyter%20Notebook%20on%20Linux,via%20pip) (Recommended) 
-- [**R**](https://cran.r-project.org/) installed and in your PATH (the `Rscript` command must be available).
+
 - [**ChimeraX**](https://www.cgl.ucsf.edu/chimerax/download.html) Simplest option if you plan to use the **Flipbook** 3D visualization.
 - _or:_
 - [**VMD**](https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=VMD) Advanced **Flipbook** option for photorealistic rendering, depth cueing, occlusion, and ray tracing. 
-- The RMSX code will attempt to install R packages like `ggplot2`, `viridis`, `dplyr`, etc., if they’re missing.
+
 
 
 ### 2. Installation
 
-Once you have those installed, just download and run the [**Quick Start Guide Notebook**](https://github.com/AntunesLab/rmsx/raw/main/RMSX_FlipBook_Quickstart.ipynb)
+Once you have those installed, just download and run the [**Quick Start Guide Notebook**](https://github.com/sm1rrnoff/rmsx/raw/main/RMSX_FlipBook_Quickstart.ipynb)
 It will walk you through the process and allow you to try RMSX, Trajectory Maps, and Flipbook on your own trajectories or ones from our publication.
 
 1. **Clone this repository**:
    ```bash
-   git clone https://github.com/AntunesLab/rmsx.git
+   git clone https://github.com/sm1rrnoff/rmsx.git
    ```
 
 2. **Install RMSX** in editable mode:
@@ -38,7 +38,7 @@ It will walk you through the process and allow you to try RMSX, Trajectory Maps,
    ```
    This also installs the required Python libraries (e.g., MDAnalysis).
 
-*(If installing on HPC or unusual platforms, you may need to manually install R libraries, but typically the R script handles that automatically.)*
+*(Note: As of the recent update, RMSX now uses pure Python (matplotlib) for visualization and no longer requires an external R installation!)*
 
 ### 3. Single-Chain Analysis Example
 
@@ -57,7 +57,7 @@ run_rmsx(
     output_dir=output_dir,         # Location for RMSX outputs
     num_slices=9,                  # Divide trajectory into 9 slices
     slice_size=None,               # (Alternately specify slice_size in frames)
-    rscript_executable='Rscript',  # Path to Rscript
+
     verbose=True,                  # Print detailed logs
     interpolate=False,             # Disable heatmap interpolation
     triple=True,                   # Generate RMSX, RMSD, and RMSF plots
@@ -92,7 +92,7 @@ all_chain_rmsx(
     output_dir=output_dir_multi,        # Output folder
     num_slices=12,                      # Number of slices
     slice_size=None,                    # or specify frames per slice
-    rscript_executable='Rscript',
+
     verbose=True,
     interpolate=False,
     triple=True,
@@ -121,7 +121,7 @@ run_rmsx_flipbook(
     trajectory_file=dcd_file,      # Trajectory
     output_dir=output_dir,         # Output folder
     num_slices=9,                  # or slice_size=...
-    rscript_executable='Rscript',
+
     verbose=True,
     interpolate=False,
     triple=True,                   # Also generate RMSD & RMSF plots
@@ -139,7 +139,6 @@ run_rmsx_flipbook(
    - **Note**: In a notebook environment, the cell may not complete until you close ChimeraX.
 
 ### 6. Additional Notes
-- **First Runs** R takes some time to download all the required packages the first time the program is run. This only happens once. 
 - **Chain IDs**: If your PDB has chain “A” or “B”, but `chain_sele="C"` is passed, you’ll see errors or zero B-factors. Ensure the chain ID matches.
 - **ChimeraX**: [Download here](https://www.cgl.ucsf.edu/chimerax/download.html) if you’d like to visualize the flipbook.
 - **Jupyter Notebook Behavior**: If you call `run_rmsx_flipbook` inside a Jupyter cell, ChimeraX runs interactively. The next cell won’t run until you **close** ChimeraX (or run it in detached mode). 
@@ -172,7 +171,7 @@ export RMSX_NO_CITATION=1
 
 ---
 
-**That’s it!** For more examples and advanced usage check out the [**Quick Start Guide**](https://github.com/AntunesLab/rmsx/raw/main/RMSX_FlipBook_Quickstart.ipynb). If you need anything, open an [issue on GitHub](https://github.com/AntunesLab/rmsx/issues). 
+**That’s it!** For more examples and advanced usage check out the [**Quick Start Guide**](https://github.com/sm1rrnoff/rmsx/raw/main/RMSX_FlipBook_Quickstart.ipynb). If you need anything, open an [issue on GitHub](https://github.com/sm1rrnoff/rmsx/issues). 
 
 ### Color Palette Options
 
