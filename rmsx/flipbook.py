@@ -284,7 +284,7 @@ def natural_sort_key(s):
 # -------------------------------------------------------------------------
 
 def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=None,
-                 spacingFactor=1, extra_commands=None, viewer='chimerax', save_script=None):
+                 spacingFactor=0.8, extra_commands=None, viewer='chimerax', save_script=None):
     """
     Executes the flipbook functionality to open PDB files in the chosen viewer.
     """
@@ -324,11 +324,16 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
 
     columns = num_models
     axis_id = num_models + 1
-
+    first = 1
     open_commands_list = [f"open '{path}'" for path in pdb_file_paths]
     open_commands = " ; ".join(open_commands_list)
 
-    default_commands = [
+    default_commands = []
+    
+    if num_models > 1:
+        default_commands.append(f"matchmaker #{2}-{num_models} to #{first} showAlignment false")
+
+    default_commands.extend([
         "view",
         "define axis",
         f"view #{axis_id} zalign #{axis_id}",
@@ -342,7 +347,7 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
         f"tile all columns {columns} spacingFactor {spacingFactor}",
         f"close #{axis_id}",
         f"save {directory}/rmsx_{palette}.png width 2000 height 1000 supersample 3 transparentBackground true"
-    ]
+    ])
 
     if extra_commands:
         if isinstance(extra_commands, str):
