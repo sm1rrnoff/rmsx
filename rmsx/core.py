@@ -1022,160 +1022,8 @@ def calculate_rmsf(
 
 
 
-def create_r_plot(
-        rmsx_csv,
-        rmsd_csv,
-        rmsf_csv,
-        rscript_executable='Rscript',
-        interpolate=False,
-        triple=False,
-        palette="plasma",
-        min_val=None,
-        max_val=None,
-        log_transform=True,
-        custom_fill_label="",
-        verbose=True,
-        window_check=False,
-):
-    """
-    Run the R script to generate RMSX plots and display the first image.
-    Returns True if a plot image was found/displayed, else False.
-    """
-    interpolate_str   = 'TRUE' if interpolate else 'FALSE'
-    triple_str        = 'TRUE' if triple else 'FALSE'
-    log_transform_str = 'TRUE' if log_transform else 'FALSE'
-    window_check_str = 'TRUE' if window_check else 'FALSE'
 
-
-    # 0) Quick sanity check for Rscript (with a simple Windows fallback)
-    def _works(path: str) -> bool:
-        try:
-            subprocess.run([path, "--version"], capture_output=True, text=True, check=False)
-            return True
-        except FileNotFoundError:
-            return False
-
-    if not _works(rscript_executable):
-        if sys.platform.startswith("win"):
-            base = Path(r"C:\Program Files\R")
-            if base.is_dir():
-                # find newest R-x.y.z and try its bin\Rscript.exe
-                cand_dirs = sorted(
-                    base.glob("R-*"),
-                    key=lambda p: tuple(int(x) for x in re.findall(r"\d+", p.name)[:3]) or (0,0,0),
-                    reverse=True
-                )
-                for d in cand_dirs:
-                    exe = d / "bin" / "Rscript.exe"
-                    if exe.is_file() and _works(str(exe)):
-                        if verbose:
-                            print(f"✅ Found Rscript at {exe}")
-                        rscript_executable = str(exe)
-                        break
-                else:
-                    if verbose:
-                        print("⚠️ Could not find Rscript automatically under C:\\Program Files\\R. "
-                              "Set RSCRIPT to your Rscript.exe path.")
-                    return False
-            else:
-                if verbose:
-                    print("⚠️ 'C:\\Program Files\\R' not found; please set RSCRIPT to your Rscript.exe path.")
-                return False
-        else:
-            if verbose:
-                print("⚠️ Rscript not found. Please ensure it is in your PATH or pass a full path.")
-            return False
-
-    try:
-        try:
-            current_dir = Path(__file__).parent.resolve()
-        except NameError:
-            current_dir = Path.cwd().resolve()
-
-        r_script_path = current_dir / 'r_scripts' / 'plot_rmsx.R'
-        if not r_script_path.is_file():
-            if verbose:
-                print(f"Error: R script not found at {r_script_path}.")
-            return False
-
-        if verbose:
-            print(f"Found R script at {r_script_path}.")
-
-        cmd = [
-            rscript_executable,
-            r_script_path.as_posix(),
-            Path(rmsx_csv).as_posix(),
-            Path(rmsd_csv).as_posix() if rmsd_csv else "",
-            Path(rmsf_csv).as_posix() if rmsf_csv else "",
-            interpolate_str,
-            triple_str,
-            palette,
-            "" if min_val is None else str(min_val),
-            "" if max_val is None else str(max_val),
-            log_transform_str,
-            custom_fill_label,
-            window_check_str
-        ]
-
-        if verbose:
-            print("Running R script command:")
-            print(" ".join(cmd))
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            if verbose:
-                print("R script execution failed.")
-                if result.stdout.strip():
-                    print("R STDOUT:\n", result.stdout)
-                if result.stderr.strip():
-                    print("R STDERR:\n", result.stderr)
-            return False
-        else:
-            if verbose:
-                print("R script executed successfully.")
-                if result.stdout.strip():
-                    print("R STDOUT:\n", result.stdout)
-
-    except FileNotFoundError:
-        if verbose:
-            print(f"Error: Rscript executable not found: {rscript_executable}. "
-                  "Please ensure R is installed and 'Rscript' is in your PATH.")
-        return False
-    except Exception as e:
-        if verbose:
-            print(f"An unexpected error occurred: {e}")
-        return False
-
-    # 3) Try to display the most recent PNG
-    try:
-        rmsx_path = Path(rmsx_csv).resolve()
-        directory = rmsx_path.parent
-        if not directory.is_dir():
-            if verbose:
-                print(f"Error: The directory does not exist: {directory}")
-            return False
-
-        image_files = sorted(directory.glob('*.png'), key=lambda p: p.stat().st_mtime, reverse=True)
-        if image_files:
-            first_image = image_files[0]
-            if verbose:
-                print(f"Displaying image: {first_image}")
-            if Image is None:
-                if verbose:
-                    print("IPython is not available; skipping inline image display.")
-                return True
-            display(Image(filename=str(first_image)))
-            return True
-        else:
-            if verbose:
-                print("No PNG files found in the specified directory.")
-            return False
-    except Exception as e:
-        if verbose:
-            print(f"An error occurred while searching for PNG files: {e}")
-        return False
-
-
+from rmsx.plotting import create_matplotlib_plot as create_plot
 
 def update_pdb_bfactor(coord_file, rmsx_df, silent=False, verbose=True):
     """
@@ -1382,7 +1230,6 @@ def run_rmsx(
         output_dir=None,
         num_slices=None,
         slice_size=None,
-        rscript_executable='Rscript',
         verbose=True,
         interpolate=False,
         triple=False,
@@ -1398,7 +1245,9 @@ def run_rmsx(
         log_transform=False,
         full_backbone=True,
         window_check=False,
-        custom_fill_label=""
+        custom_fill_label="",
+        min_val=None,
+        max_val=None
 ):
     """
     Run the RMSX analysis on a specified trajectory range.
@@ -1574,16 +1423,17 @@ def run_rmsx(
     if make_plot:
         if verbose:
             print("Generating plots...")
-        create_r_plot(
+        create_plot(
             rmsx_csv, rmsd_csv, rmsf_csv,
-            rscript_executable=rscript_executable,
             interpolate=interpolate,
             triple=triple,
             palette=palette,
             verbose=verbose,
             log_transform=log_transform,
             window_check=window_check,
-            custom_fill_label=custom_fill_label  # Passing the custom label
+            custom_fill_label=custom_fill_label,  # Passing the custom label
+            min_val=min_val,
+            max_val=max_val
         )
     else:
         if verbose:
@@ -1600,14 +1450,14 @@ def run_rmsx(
 
 
 # def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=None, slice_size=None,
-#                    rscript_executable='Rscript', verbose=True, interpolate=True, triple=False, overwrite=False,
+# verbose=True, interpolate=True, triple=False, overwrite=False,
 #                    palette='viridis', start_frame=0, end_frame=None, sync_color_scale=False, analysis_type="protein",
 #                    manual_length_ns=None, summary_n=3, log_transform=False, custom_fill_label=""):
 def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=None, slice_size=None,
-                   rscript_executable='Rscript', verbose=True, interpolate=False, triple=False, overwrite=False,
+ verbose=True, interpolate=False, triple=False, overwrite=False,
                    palette='viridis', start_frame=0, end_frame=None, sync_color_scale=False,
                    analysis_type="protein", manual_length_ns=None, summary_n=3, log_transform=False, full_backbone=False,
-                   window_check=False, custom_fill_label=""):
+                   window_check=False, custom_fill_label="", min_val=None, max_val=None):
     """
     Perform RMSX analysis for all chains in the topology file.
 
@@ -1699,7 +1549,6 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
             output_dir=output_dir,
             num_slices=num_slices,
             slice_size=slice_size,
-            rscript_executable=rscript_executable,
             verbose=verbose,
             interpolate=interpolate,
             triple=triple,
@@ -1715,7 +1564,9 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
             log_transform=log_transform,
             full_backbone=full_backbone,
             window_check=window_check,
-            custom_fill_label=custom_fill_label  # Passing the custom label
+            custom_fill_label=custom_fill_label,  # Passing the custom label
+            min_val=min_val,
+            max_val=max_val
         )
 
         chain_output_dir = os.path.join(output_dir, f"chain_{chain}_rmsx")
@@ -1750,11 +1601,10 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
             csv_dir = Path(csv_path).parent
             rmsd_csv = csv_dir / "rmsd.csv"
             rmsf_csv = csv_dir / "rmsf.csv"
-            create_r_plot(
+            create_plot(
                 rmsx_csv=str(csv_path),
                 rmsd_csv=str(rmsd_csv),
                 rmsf_csv=str(rmsf_csv),
-                rscript_executable=rscript_executable,
                 interpolate=interpolate,
                 triple=triple,
                 palette=palette,
@@ -1776,8 +1626,7 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
 #     output_dir=None,
 #     num_slices=None,
 #     slice_size=None,
-#     rscript_executable='Rscript',
-#     verbose=True,
+##     verbose=True,
 #     interpolate=True,
 #     triple=False,
 #     overwrite=False,
@@ -1808,8 +1657,7 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
 #         chain_make_plot = not sync_color_scale
 #         _summary_tuple = run_rmsx(
 #             topology_file=topology_file, trajectory_file=trajectory_file, output_dir=output_dir,
-#             num_slices=num_slices, slice_size=slice_size, rscript_executable=rscript_executable,
-#             verbose=verbose, interpolate=interpolate, triple=triple, chain_sele=chain, overwrite=overwrite,
+#             num_slices=num_slices, slice_size=slice_size,#             verbose=verbose, interpolate=interpolate, triple=triple, chain_sele=chain, overwrite=overwrite,
 #             palette=palette, start_frame=start_frame, end_frame=end_frame, make_plot=chain_make_plot,
 #             analysis_type=analysis_type, summary_n=summary_n, manual_length_ns=manual_length_ns,
 #             log_transform=log_transform
@@ -1847,9 +1695,9 @@ def all_chain_rmsx(topology_file, trajectory_file, output_dir=None, num_slices=N
 #             csv_dir = Path(csv_path).parent
 #             rmsd_csv = csv_dir / "rmsd.csv"
 #             rmsf_csv = csv_dir / "rmsf.csv"
-#             create_r_plot(
+#             create_plot(
 #                 rmsx_csv=str(csv_path), rmsd_csv=str(rmsd_csv), rmsf_csv=str(rmsf_csv),
-#                 rscript_executable=rscript_executable, interpolate=interpolate, triple=triple,
+# interpolate=interpolate, triple=triple,
 #                 palette=palette, min_val=global_min, max_val=global_max, verbose=verbose,
 #                 log_transform=log_transform
 #             )
@@ -1862,7 +1710,6 @@ def run_rmsx_flipbook(
         output_dir=None,
         num_slices=9,
         slice_size=None,
-        rscript_executable='Rscript',
         verbose=True,
         interpolate=False,
         triple=False,
@@ -1903,7 +1750,6 @@ def run_rmsx_flipbook(
         output_dir=output_dir,
         num_slices=num_slices,
         slice_size=slice_size,
-        rscript_executable=rscript_executable,
         verbose=verbose,
         interpolate=interpolate,
         triple=triple,
@@ -1938,7 +1784,6 @@ def run_shift_flipbook(
         output_dir=None,
         num_slices=9,
         slice_size=None,
-        rscript_executable='Rscript',
         verbose=True,
         interpolate=False,
         triple=False,
@@ -1979,7 +1824,6 @@ def run_shift_flipbook(
         output_dir=output_dir,
         num_slices=num_slices,
         slice_size=slice_size,
-        rscript_executable=rscript_executable,
         verbose=verbose,
         interpolate=interpolate,
         triple=triple,
@@ -2017,8 +1861,7 @@ def run_shift_flipbook(
 #     trajectory_file="mytrajectory.dcd",
 #     output_dir="my_output",
 #     num_slices=10,       # or slice_size=100
-#     rscript_executable="Rscript",
-#     verbose=True,
+##     verbose=True,
 #     interpolate=False,
 #     triple=True,
 #     overwrite=True,
@@ -2046,8 +1889,7 @@ def run_shift_flipbook(
 #     output_dir=output_dir_single,
 #     num_slices=16,
 #     slice_size=None,
-#     rscript_executable='Rscript',
-#     verbose=True,
+##     verbose=True,
 #     interpolate=False,
 #     triple=True,
 #     overwrite=True,
@@ -2069,8 +1911,7 @@ def run_shift_flipbook(
 #     output_dir=output_dir_multi,
 #     num_slices=12,
 #     slice_size=None,
-#     rscript_executable='Rscript',
-#     verbose=True,
+##     verbose=True,
 #     interpolate=False,
 #     triple=True,
 #     overwrite=True,
@@ -2184,8 +2025,7 @@ def process_trajectory_shifts_by_size(u, output_dir, total_size, slice_size, cha
 #         output_dir=None,
 #         num_slices=None,
 #         slice_size=None,
-#         rscript_executable='Rscript',
-#         verbose=True,
+##         verbose=True,
 #         interpolate=True,
 #         triple=False,
 #         chain_sele=None,
@@ -2206,7 +2046,6 @@ def run_shift_map(
         output_dir=None,
         num_slices=None,
         slice_size=None,
-        rscript_executable='Rscript',
         verbose=True,
         interpolate=False,
         triple=False,
@@ -2341,9 +2180,8 @@ def run_shift_map(
     if make_plot:
         if verbose:
             print("Generating plots for shift map...")
-        create_r_plot(
+        create_plot(
             shift_csv, rmsd_csv, rmsf_csv,
-            rscript_executable=rscript_executable,
             interpolate=interpolate,
             triple=triple,
             palette=palette,
@@ -2373,7 +2211,6 @@ def all_chain_shift_map(
         output_dir=None,
         num_slices=None,
         slice_size=None,
-        rscript_executable='Rscript',
         verbose=True,
         interpolate=False,
         triple=False,
@@ -2480,7 +2317,6 @@ def all_chain_shift_map(
             output_dir=output_dir,
             num_slices=num_slices,
             slice_size=slice_size,
-            rscript_executable=rscript_executable,
             verbose=verbose,
             interpolate=interpolate,
             triple=triple,
@@ -2531,11 +2367,10 @@ def all_chain_shift_map(
             csv_dir = Path(csv_path).parent
             rmsd_csv = csv_dir / "rmsd.csv"
             rmsf_csv = csv_dir / "rmsf.csv"
-            create_r_plot(
+            create_plot(
                 rmsx_csv=str(csv_path),
                 rmsd_csv=str(rmsd_csv),
                 rmsf_csv=str(rmsf_csv),
-                rscript_executable=rscript_executable,
                 interpolate=interpolate,
                 triple=triple,
                 palette=palette,

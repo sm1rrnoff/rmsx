@@ -12,15 +12,16 @@ authors = [{name="Finn Beruldsen"}]
 dependencies = [
   "MDAnalysis>=2.0.0",
   "pandas>=1.1.0",
-#  "plotly>=4.14.3"
+  "matplotlib>=3.5.0"
 ]
 
 [project.scripts]
 rmsx = "rmsx.cli:main"
+rmsx-flipbook = "rmsx.flipbook:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rmsx*"]
 
 [tool.setuptools.package-data]
-rmsx = ["r_scripts/*.R", "commands.cxc", "vmd_scripts/*.tcl"]
+rmsx = ["commands.cxc", "vmd_scripts/*.tcl"]

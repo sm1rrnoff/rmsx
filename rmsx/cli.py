@@ -31,25 +31,40 @@ def build_parser(prog: str = "rmsx") -> argparse.ArgumentParser:
     p.add_argument("--palette", default=None, help="Palette name (default: viridis)")
     p.add_argument("--start_frame", type=int, default=None, help="Start frame index")
     p.add_argument("--end_frame", type=int, default=None, help="End frame index")
-    p.add_argument("--analysis_type", choices=["protein","dna","rna","generic"], default=None)
-    p.add_argument("--summary_n", type=int, default=None)
-    p.add_argument("--manual_length_ns", type=float, default=None)
-    p.add_argument("--custom_fill_label", default=None)
-    p.add_argument("--rscript", dest="rscript_executable", default=None, help="Path to Rscript")
+    p.add_argument("--analysis_type", choices=["protein","dna","rna","generic"], default=None,
+                   help="Type of molecule to analyze (default: protein unless specified otherwise)")
+    p.add_argument("--summary_n", type=int, default=None,
+                   help="Number of extreme values (top/bottom) to display in the CLI summary")
+    p.add_argument("--manual_length_ns", type=float, default=None,
+                   help="Manually override the total simulation length in nanoseconds")
+    p.add_argument("--custom_fill_label", default=None,
+                   help="Custom string label for the plot's colorbar axis")
+    p.add_argument("--min_val", type=float, default=None,
+                   help="Global minimum color scale value for the heatmap")
+    p.add_argument("--max_val", type=float, default=None,
+                   help="Global maximum color scale value for the heatmap")
 
     # booleans as tri-state (None unless explicitly set)
     vb = p.add_mutually_exclusive_group()
-    vb.add_argument("--verbose", dest="verbose", action="store_true")
-    vb.add_argument("--quiet",   dest="verbose", action="store_false")
+    vb.add_argument("--verbose", dest="verbose", action="store_true",
+                    help="Enable verbose logging output")
+    vb.add_argument("--quiet",   dest="verbose", action="store_false",
+                    help="Suppress logging output")
 
     ib = p.add_mutually_exclusive_group()
-    ib.add_argument("--interpolate",    dest="interpolate", action="store_true")
-    ib.add_argument("--no-interpolate", dest="interpolate", action="store_false")
+    ib.add_argument("--interpolate",    dest="interpolate", action="store_true",
+                    help="Apply visual smoothing (Gouraud shading) to the heatmap")
+    ib.add_argument("--no-interpolate", dest="interpolate", action="store_false",
+                    help="Disable visual smoothing (nearest shading)")
 
-    p.add_argument("--triple", action="store_true", default=None)
-    p.add_argument("--log_transform", action="store_true", default=None)
-    p.add_argument("--no-plot", dest="make_plot", action="store_false", default=None)
-    p.add_argument("--overwrite", action="store_true", default=None)
+    p.add_argument("--triple", action="store_true", default=None,
+                   help="Generate an advanced plot showing RMSD, RMSX heatmap, and RMSF sequentially")
+    p.add_argument("--log_transform", action="store_true", default=None,
+                   help="Apply a log transform (np.log1p) to the output data for better visualization mapping")
+    p.add_argument("--no-plot", dest="make_plot", action="store_false", default=None,
+                   help="Disable plot generation; only output CSV and PDB files")
+    p.add_argument("--overwrite", action="store_true", default=None,
+                   help="Force overwrite of an existing output directory")
 
     # make unspecified flags stay as None
     p.set_defaults(verbose=None, interpolate=None)
@@ -71,7 +86,6 @@ def main(argv=None, prog: str = "rmsx") -> None:
     if args.output_dir is not None:        kw["output_dir"] = args.output_dir
     if args.num_slices is not None:        kw["num_slices"] = args.num_slices
     if args.slice_size is not None:        kw["slice_size"] = args.slice_size
-    if args.rscript_executable is not None:kw["rscript_executable"] = args.rscript_executable
     if args.verbose is not None:           kw["verbose"] = args.verbose
     if args.interpolate is not None:       kw["interpolate"] = args.interpolate
     if args.triple is not None:            kw["triple"] = args.triple
@@ -86,6 +100,8 @@ def main(argv=None, prog: str = "rmsx") -> None:
     if args.manual_length_ns is not None:  kw["manual_length_ns"] = args.manual_length_ns
     if args.log_transform is not None:     kw["log_transform"] = args.log_transform
     if args.custom_fill_label is not None: kw["custom_fill_label"] = args.custom_fill_label
+    if args.min_val is not None:           kw["min_val"] = args.min_val
+    if args.max_val is not None:           kw["max_val"] = args.max_val
 
     # run_rmsx(topology_file, trajectory_file, **options)
     run_rmsx(args.psf_file, args.dcd_file, **kw)

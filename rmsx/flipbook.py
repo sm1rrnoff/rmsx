@@ -284,7 +284,7 @@ def natural_sort_key(s):
 # -------------------------------------------------------------------------
 
 def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=None,
-                 spacingFactor=1, extra_commands=None, viewer='chimerax'):
+                 spacingFactor=1, extra_commands=None, viewer='chimerax', save_script=None):
     """
     Executes the flipbook functionality to open PDB files in the chosen viewer.
     """
@@ -325,7 +325,8 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
     columns = num_models
     axis_id = num_models + 1
 
-    open_commands = " ; ".join([f"open '{path}'" for path in pdb_file_paths])
+    open_commands_list = [f"open '{path}'" for path in pdb_file_paths]
+    open_commands = " ; ".join(open_commands_list)
 
     default_commands = [
         "view",
@@ -442,6 +443,14 @@ def run_flipbook(directory, palette='viridis', min_bfactor=None, max_bfactor=Non
     # =====================================================================
     #
 
+    if save_script:
+        script_path = os.path.join(directory, save_script) if not os.path.isabs(save_script) else save_script
+        with open(script_path, 'w') as f:
+            f.write("\n".join(open_commands_list) + "\n")
+            f.write("\n".join(default_commands) + "\n")
+        print(f"[flipbook] Saved ChimeraX script to {script_path}")
+        return
+
     chimera_commands = f"{open_commands} ; " + " ; ".join(default_commands)
 
     try:
@@ -479,6 +488,8 @@ def main():
                         help='Choose visualization backend.')
     parser.add_argument('--extra-commands', type=str, nargs='+', default=[],
                         help='Extra ChimeraX commands to run after the default commands.')
+    parser.add_argument('--save_script', type=str, default=None,
+                        help='Save the ChimeraX commands to a .cxc script file instead of launching ChimeraX.')
     args = parser.parse_args()
 
     try:
@@ -488,7 +499,8 @@ def main():
             min_bfactor=args.min_bfactor,
             max_bfactor=args.max_bfactor,
             extra_commands=args.extra_commands,
-            viewer=args.viewer
+            viewer=args.viewer,
+            save_script=args.save_script
         )
     except Exception as e:
         print(f"[flipbook] ERROR: {e}", file=sys.stderr)
